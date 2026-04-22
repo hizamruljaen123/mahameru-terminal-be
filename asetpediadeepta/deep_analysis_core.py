@@ -2,7 +2,15 @@
 deep_analysis_core.py
 Fungsi inti matematika dari ta_lib_deep_analysis + talib_deep_analysis
 """
-import numpy as np, pandas as pd, talib, math, warnings
+import numpy as np, pandas as pd, math, warnings
+try:
+    import talib
+except ImportError:
+    print("\n" + "="*60)
+    print(" ERROR: TA-Lib Python wrapper not found!")
+    print(" Please run: pip install TA-Lib")
+    print("="*60 + "\n")
+    raise ImportError("TA-Lib Python wrapper is required for Deep TA Service. Run 'pip install TA-Lib'")
 from scipy import stats, signal
 from scipy.ndimage import uniform_filter1d
 from scipy.fft import fft, fftfreq

@@ -2,7 +2,11 @@
 deep_analysis_ohlcv.py
 Pipeline processing, statistical structure, composite scoring
 """
-import numpy as np, pandas as pd, talib, warnings
+import numpy as np, pandas as pd, warnings
+try:
+    import talib
+except ImportError:
+    talib = None
 from scipy.signal import find_peaks
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
