@@ -1249,4 +1249,4 @@ def get_market_movers(index_symbol):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5005, debug=True)
+    socketio.run(app, host=os.getenv('API_HOST', '0.0.0.0'), port=5005, debug=True, allow_unsafe_werkzeug=True)
