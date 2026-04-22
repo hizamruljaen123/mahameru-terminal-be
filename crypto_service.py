@@ -126,11 +126,9 @@ state: Dict[str, Any] = {
 _RSS_LOCK = threading.Lock()  # Thread-safe RSS cache access
 
 MAJOR_CRYPTO_SYMBOLS = [
-    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "SOL-USD", "ADA-USD", "DOGE-USD", "TRX-USD", "DOT-USD", "MATIC-USD",
-    "LTC-USD", "SHIB-USD", "AVAX-USD", "DAI-USD", "WBTC-USD", "BCH-USD", "LINK-USD", "LEO-USD", "ATOM-USD", "UNI-USD",
-    "XMR-USD", "OKB-USD", "ETC-USD", "XLM-USD", "TON-USD", "ICP-USD", "LDO-USD", "HBAR-USD", "FIL-USD", "APT-USD",
-    "CRO-USD", "ARB-USD", "VET-USD", "NEAR-USD", "OP-USD", "QNT-USD", "MKR-USD", "GRT-USD", "AAVE-USD", "ALGO-USD",
-    "EGLD-USD", "SAND-USD", "MANA-USD", "THETA-USD", "AXS-USD", "FLOW-USD", "EOS-USD", "NEO-USD", "XEC-USD", "KAVA-USD"
+    "BTC-USD", "ETH-USD", "USDT-USD", "XRP-USD", "BNB-USD", "SOL-USD", "USDC-USD", "DOGE-USD", "ADA-USD", "TRX-USD",
+    "AVAX-USD", "LINK-USD", "SHIB-USD", "TON-USD", "WBTC-USD", "SUI20947-USD", "DOT-USD", "BCH-USD", "LTC-USD", "NEAR-USD",
+    "UNI7083-USD", "ICP-USD", "APT21794-USD", "POL-USD", "STX4847-USD", "OP-USD", "AAVE-USD", "IMX10603-USD", "ARB11841-USD", "FIL-USD"
 ]
 
 def clean_html(raw_html):
@@ -160,6 +158,26 @@ def fetch_rss_feeds(feeds_list):
     
     random.shuffle(all_items)
     return all_items
+
+def clean_nans(obj):
+    """Recursively replace NaN and Inf with None or 0.0 for JSON compatibility."""
+    if isinstance(obj, dict):
+        return {k: clean_nans(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nans(v) for v in obj]
+    elif isinstance(obj, float):
+        if np.isnan(obj) or np.isinf(obj):
+            return 0.0
+        return obj
+    return obj
+
+def safe_float(val, default=0.0):
+    try:
+        if val is None or np.isnan(val) or np.isinf(val):
+            return default
+        return float(val)
+    except:
+        return default
 
 # CRYPTO DATA CACHE
 CRYPTO_CACHE = {
@@ -250,13 +268,13 @@ async def fetch_top_coins_loop():
                         "symbol": symbol_raw,
                         "name": meta.get("name", symbol_raw),
                         "rank": i + 1,
-                        "price": price,
-                        "price_idr": price * state["usd_idr_rate"],
-                        "market_cap": meta.get("market_cap", 0.0),
-                        "change_1h": change_1h,
-                        "change_24h": change_24h,
-                        "change_7d": change_7d,
-                        "volume_24h": vol_24h,
+                        "price": safe_float(price),
+                        "price_idr": safe_float(price * state["usd_idr_rate"]),
+                        "market_cap": safe_float(meta.get("market_cap", 0.0)),
+                        "change_1h": safe_float(change_1h),
+                        "change_24h": safe_float(change_24h),
+                        "change_7d": safe_float(change_7d),
+                        "volume_24h": safe_float(vol_24h),
                         "last_updated": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
                     })
                 except Exception as ex:
@@ -276,10 +294,10 @@ async def fetch_top_coins_loop():
 def get_top_coins(top: int = 100):
     # Use cache if available
     if CRYPTO_CACHE["top_coins"] and (time.time() - CRYPTO_CACHE["last_updated"] < 90):
-        return {"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": True}
+        return clean_nans({"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": True})
 
     # If cache empty, return empty list (loop will fill it)
-    return {"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": False}
+    return clean_nans({"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": False})
 
 @app.get("/api/crypto/detail/{symbol}")
 def get_coin_detail(symbol: str, period: str = "1mo"):
@@ -403,7 +421,7 @@ def get_coin_detail(symbol: str, period: str = "1mo"):
         }
     }
     set_detail_cache(symbol, result)
-    return result
+    return clean_nans(result)
 
 @app.get("/api/news/economy")
 def get_economy_news():
@@ -456,7 +474,7 @@ def api_ai_analyze(symbol: str):
         
         price = history[-1]['close'] if history else 0
         ai_verdict = crypto_multi_agent.run_all_agents(symbol, price, history, ta_report)
-        return {"status": "success", "data": ai_verdict}
+        return clean_nans({"status": "success", "data": ai_verdict})
     except Exception as e:
         print(f"Error AI Analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
