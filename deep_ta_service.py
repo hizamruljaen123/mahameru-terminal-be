@@ -1275,6 +1275,7 @@ def api_charts_gauges():
 
 if __name__ == "__main__":
     import threading as _th
+    import os
     _cleanup_t = _th.Thread(target=_session_cleanup_worker, daemon=True)
     _cleanup_t.start()
-    app.run(port=5200, debug=True)
+    app.run(host=os.getenv('API_HOST', '0.0.0.0'), port=5200, debug=True)

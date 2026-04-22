@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from db import get_db_connection
@@ -239,4 +240,4 @@ def get_proximity_assets():
         conn.close()
 
 if __name__ == '__main__':
-    app.run(port=8111, debug=True)
+    app.run(host=os.getenv('API_HOST', '0.0.0.0'), port=8111, debug=True)
