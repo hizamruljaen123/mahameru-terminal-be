@@ -690,4 +690,4 @@ if __name__ == "__main__":
     print("Proxying: Open-Meteo, RestCountries, Frankfurter,")
     print("          World Bank, Nager.At, GDELT")
     print("=" * 50)
-    uvicorn.run(app, log_level="debug",  port=8091)
+    uvicorn.run(app, host="0.0.0.0", log_level="debug", port=8091)

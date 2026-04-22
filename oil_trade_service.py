@@ -579,4 +579,4 @@ def get_trade_news(origin: str = Query(...), destination: str = Query(...)):
 
 if __name__ == "__main__":
     print("=:: EIA_TRADE_MASTER_ON_8090 ::=")
-    uvicorn.run(api, log_level="debug",  port=8090)
+    uvicorn.run(api, host="0.0.0.0", log_level="debug", port=8090)

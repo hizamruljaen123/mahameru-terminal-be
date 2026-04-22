@@ -597,4 +597,4 @@ if __name__ == "__main__":
     threading.Thread(target=background_analyzer, daemon=True).start()
     
     # Run uvicorn
-    uvicorn.run(app,port=5008)
+    uvicorn.run(app, host="0.0.0.0", port=5008)

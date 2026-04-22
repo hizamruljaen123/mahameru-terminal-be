@@ -440,4 +440,4 @@ def get_combined_stats():
 
 if __name__ == "__main__":
     print("=:: STARTING_OIL_REFINERY_SERVICE_ON_PORT_8089 ::=")
-    uvicorn.run(app, log_level="debug",  port=8089)
+    uvicorn.run(app, host="0.0.0.0", log_level="debug", port=8089)

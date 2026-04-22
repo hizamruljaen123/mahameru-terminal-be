@@ -345,4 +345,4 @@ async def root():
 
 if __name__ == "__main__":
     print("=:: MEMULAI SERVICE PYTHON MINES DATA (FULLY EXTENDED) ::=")
-    uvicorn.run("mines_service:app", log_level="debug", port=8082, reload=True)
+    uvicorn.run("mines_service:app", host="0.0.0.0", log_level="debug", port=8082, reload=False)

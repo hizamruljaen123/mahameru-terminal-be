@@ -188,4 +188,4 @@ async def root():
     return {"status": "online", "service": "submarine_cable_service"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, log_level="debug",  port=8120)
+    uvicorn.run(app, host="0.0.0.0", log_level="debug", port=8120)

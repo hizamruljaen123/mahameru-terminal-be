@@ -16,6 +16,7 @@ import random
 import re
 from typing import Dict, Any, List, Optional
 from crypto_agents import crypto_multi_agent
+import yfinance as yf
 
 class MonteCarloSimulator:
     def __init__(self, config=None):
@@ -83,16 +84,6 @@ HAS_SIMULATOR = True
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
-# API Key from environment — NEVER hardcode!
-API_KEY = os.getenv('CMC_API_KEY', '')
-if not API_KEY:
-    import logging
-    logging.warning("[CRYPTO_SERVICE] CMC_API_KEY not set in .env — API calls will fail!")
-
-CMC_LISTINGS_URL = f"{os.getenv('CMC_API_BASE', 'https://pro-api.coinmarketcap.com')}/v1/cryptocurrency/listings/latest"
-CMC_METADATA_URL = f"{os.getenv('CMC_API_BASE', 'https://pro-api.coinmarketcap.com')}/v2/cryptocurrency/info"
-CMC_QUOTES_URL = f"{os.getenv('CMC_API_BASE', 'https://pro-api.coinmarketcap.com')}/v2/cryptocurrency/quotes/latest"
-CMC_HISTORY_URL = f"{os.getenv('CMC_API_BASE', 'https://pro-api.coinmarketcap.com')}/v1/cryptocurrency/quotes/historical"
 BINANCE_KLINE_URL = f"{os.getenv('BINANCE_API_BASE', 'https://api.binance.com')}/api/v3/klines"
 
 # Top RSS Feeds from the requested config
@@ -115,7 +106,7 @@ ECONOMY_FEEDS = [
     {"name": "Detik Finance", "url": "https://finance.detik.com/rss"}
 ]
 
-app = FastAPI(debug=True, title="Crypto Data Microservice (v9 + Live RSS)")
+app = FastAPI(debug=True, title="Crypto Data Microservice (v9 + yFinance)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -133,6 +124,14 @@ state: Dict[str, Any] = {
     "rss_last_updated": 0.0
 }
 _RSS_LOCK = threading.Lock()  # Thread-safe RSS cache access
+
+MAJOR_CRYPTO_SYMBOLS = [
+    "BTC-USD", "ETH-USD", "BNB-USD", "XRP-USD", "SOL-USD", "ADA-USD", "DOGE-USD", "TRX-USD", "DOT-USD", "MATIC-USD",
+    "LTC-USD", "SHIB-USD", "AVAX-USD", "DAI-USD", "WBTC-USD", "BCH-USD", "LINK-USD", "LEO-USD", "ATOM-USD", "UNI-USD",
+    "XMR-USD", "OKB-USD", "ETC-USD", "XLM-USD", "TON-USD", "ICP-USD", "LDO-USD", "HBAR-USD", "FIL-USD", "APT-USD",
+    "CRO-USD", "ARB-USD", "VET-USD", "NEAR-USD", "OP-USD", "QNT-USD", "MKR-USD", "GRT-USD", "AAVE-USD", "ALGO-USD",
+    "EGLD-USD", "SAND-USD", "MANA-USD", "THETA-USD", "AXS-USD", "FLOW-USD", "EOS-USD", "NEO-USD", "XEC-USD", "KAVA-USD"
+]
 
 def clean_html(raw_html):
     if not raw_html: return ""
@@ -168,6 +167,9 @@ CRYPTO_CACHE = {
     "last_updated": 0
 }
 
+# Persistent metadata store for names and market caps (updated less frequently)
+METADATA_STORE = {}
+
 DETAIL_CACHE = {}
 D_CACHE_TTL = 900 # 15 mins for heavy simulations
 
@@ -181,80 +183,111 @@ def get_detail_cache(symbol):
 def set_detail_cache(symbol, data):
     DETAIL_CACHE[symbol] = {'timestamp': time.time(), 'data': data}
 
-async def fetch_top_coins_loop():
-    """Background task to refresh top 200 coins every 60 seconds"""
-    print("=:: STARTING CRYPTO_SERVICE BACKGROUND UPDATER ::= ")
-    headers = {"X-CMC_PRO_API_KEY": API_KEY, "Accept": "application/json"}
+async def fetch_metadata_loop():
+    """Background task to fetch coin names and market caps every 60 minutes"""
+    print("=:: STARTING CRYPTO_METADATA UPDATER ::= ")
     while True:
         try:
-            # We fetch top 200 for a good balance of coverage and speed
-            res = requests.get(CMC_LISTINGS_URL, headers=headers, params={"limit": 200, "convert": "USD"}, timeout=10)
-            data = res.json().get("data", [])
+            # We use yf.Tickers for faster info access if possible, 
+            # but yfinance info is still one-by-one under the hood.
+            for ticker in MAJOR_CRYPTO_SYMBOLS:
+                try:
+                    t = yf.Ticker(ticker)
+                    info = t.info
+                    METADATA_STORE[ticker] = {
+                        "name": info.get("name") or info.get("shortName") or ticker.replace("-USD", ""),
+                        "market_cap": float(info.get("marketCap") or 0.0)
+                    }
+                    # Small sleep to avoid hitting rate limits
+                    await asyncio.sleep(0.5)
+                except:
+                    continue
+            print(f"[METADATA_SYNC] Updated metadata for {len(METADATA_STORE)} assets.")
+        except Exception as e:
+            print(f"[METADATA_SYNC_ERROR] {e}")
+        await asyncio.sleep(3600) # Update metadata every hour
+
+async def fetch_top_coins_loop():
+    """Background task to refresh crypto data using yfinance every 90 seconds"""
+    print("=:: STARTING CRYPTO_SERVICE BACKGROUND UPDATER (yFinance) ::= ")
+    while True:
+        try:
+            # Fetch 8 days of hourly data to calculate 1h, 24h, and 7d changes
+            # This is much more efficient than 50 separate historical calls
+            data = yf.download(MAJOR_CRYPTO_SYMBOLS, period="8d", interval="1h", group_by='ticker', progress=False)
             
             coins = []
-            for coin in data:
-                quote = coin.get("quote", {}).get("USD", {})
-                coins.append({
-                    "symbol": coin.get("symbol"),
-                    "name": coin.get("name"),
-                    "rank": coin.get("cmc_rank"),
-                    "price": float(quote.get("price", 0.0)),
-                    "price_idr": float(quote.get("price", 0.0)) * state["usd_idr_rate"],
-                    "market_cap": float(quote.get("market_cap", 0.0)),
-                    "change_1h": float(quote.get("percent_change_1h", 0.0)),
-                    "change_24h": float(quote.get("percent_change_24h", 0.0)),
-                    "change_7d": float(quote.get("percent_change_7d", 0.0)),
-                    "volume_24h": float(quote.get("volume_24h", 0.0)),
-                    "last_updated": quote.get("last_updated")
-                })
+            for i, ticker in enumerate(MAJOR_CRYPTO_SYMBOLS):
+                try:
+                    symbol_raw = ticker.replace("-USD", "")
+                    df = data[ticker] if len(MAJOR_CRYPTO_SYMBOLS) > 1 else data
+                    if df.empty or len(df) < 2: continue
+                    
+                    # Latest row
+                    last_row = df.iloc[-1]
+                    price = float(last_row['Close'])
+                    
+                    # 1h change (compare with previous hourly candle)
+                    price_1h = float(df.iloc[-2]['Close']) if len(df) >= 2 else price
+                    change_1h = ((price - price_1h) / price_1h * 100) if price_1h != 0 else 0
+                    
+                    # 24h change (approx 24 candles ago)
+                    idx_24h = -25 if len(df) >= 25 else 0
+                    price_24h = float(df.iloc[idx_24h]['Close'])
+                    change_24h = ((price - price_24h) / price_24h * 100) if price_24h != 0 else 0
+                    
+                    # 7d change (approx the start of our 8d fetch)
+                    price_7d = float(df.iloc[0]['Close'])
+                    change_7d = ((price - price_7d) / price_7d * 100) if price_7d != 0 else 0
+                    
+                    # Volume 24h (Sum of last 24 candles)
+                    vol_24h = float(df.iloc[-24:]['Volume'].sum()) if len(df) >= 24 else float(df['Volume'].sum())
+                    
+                    # Get metadata from store
+                    meta = METADATA_STORE.get(ticker, {})
+                    
+                    coins.append({
+                        "symbol": symbol_raw,
+                        "name": meta.get("name", symbol_raw),
+                        "rank": i + 1,
+                        "price": price,
+                        "price_idr": price * state["usd_idr_rate"],
+                        "market_cap": meta.get("market_cap", 0.0),
+                        "change_1h": change_1h,
+                        "change_24h": change_24h,
+                        "change_7d": change_7d,
+                        "volume_24h": vol_24h,
+                        "last_updated": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                    })
+                except Exception as ex:
+                    print(f"Error processing ticker {ticker}: {ex}")
             
-            CRYPTO_CACHE["top_coins"] = coins
-            CRYPTO_CACHE["last_updated"] = time.time()
-            print(f"[CRYPTO_SYNC] Periodic update completed: {len(coins)} assets cached.")
+            if coins:
+                CRYPTO_CACHE["top_coins"] = coins
+                CRYPTO_CACHE["last_updated"] = time.time()
+                print(f"[CRYPTO_SYNC] yFinance update completed: {len(coins)} assets cached.")
             
         except Exception as e:
             print(f"[CRYPTO_SYNC_ERROR] {e}")
             
-        await asyncio.sleep(60)
+        await asyncio.sleep(90)
 
 @app.get("/api/crypto/top")
-def get_top_coins(top: int = 1000):
-    # Use cache if available and top is within cached range
-    if CRYPTO_CACHE["top_coins"] and top <= len(CRYPTO_CACHE["top_coins"]) and (time.time() - CRYPTO_CACHE["last_updated"] < 90):
+def get_top_coins(top: int = 100):
+    # Use cache if available
+    if CRYPTO_CACHE["top_coins"] and (time.time() - CRYPTO_CACHE["last_updated"] < 90):
         return {"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": True}
 
-    headers = {"X-CMC_PRO_API_KEY": API_KEY, "Accept": "application/json"}
-    try:
-        res = requests.get(CMC_LISTINGS_URL, headers=headers, params={"limit": top, "convert": "USD"}, timeout=10)
-        data = res.json().get("data", [])
-        
-        coins = []
-        for coin in data:
-            quote = coin.get("quote", {}).get("USD", {})
-            coins.append({
-                "symbol": coin.get("symbol"),
-                "name": coin.get("name"),
-                "rank": coin.get("cmc_rank"),
-                "price": float(quote.get("price", 0.0)),
-                "price_idr": float(quote.get("price", 0.0)) * state["usd_idr_rate"],
-                "market_cap": float(quote.get("market_cap", 0.0)),
-                "change_1h": float(quote.get("percent_change_1h", 0.0)),
-                "change_24h": float(quote.get("percent_change_24h", 0.0)),
-                "change_7d": float(quote.get("percent_change_7d", 0.0)),
-                "volume_24h": float(quote.get("volume_24h", 0.0)),
-                "last_updated": quote.get("last_updated")
-            })
-            
-        return {"status": "success", "data": coins}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # If cache empty, return empty list (loop will fill it)
+    return {"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": False}
 
 @app.get("/api/crypto/detail/{symbol}")
 def get_coin_detail(symbol: str, period: str = "1mo"):
     cached = get_detail_cache(symbol)
     if cached: return cached
 
-    headers = {"X-CMC_PRO_API_KEY": API_KEY, "Accept": "application/json"}
+    ticker_symbol = f"{symbol}-USD"
+    ticker = yf.Ticker(ticker_symbol)
     
     range_limit_map = {
         "1d": 1, "5d": 5, "1mo": 30, "3mo": 90, 
@@ -268,48 +301,53 @@ def get_coin_detail(symbol: str, period: str = "1mo"):
         state["rss_cache"] = fetch_rss_feeds(RSS_FEEDS)
         state["rss_last_updated"] = current_time
 
-    # 2. Metadata
-    metadata = state["metadata_cache"].get(symbol)
-    if not metadata:
-        try:
-            res = requests.get(CMC_METADATA_URL, headers=headers, params={"symbol": symbol}, timeout=5)
-            data_map = res.json().get("data", {})
-            info_list = data_map.get(symbol, [{}])
-            info = info_list[0] if isinstance(info_list, list) else info_list
-            metadata = { "logo": info.get("logo"), "description": info.get("description"), "urls": info.get("urls", {}), "tags": info.get("tags", [])}
-            state["metadata_cache"][symbol] = metadata
-        except: metadata = {"logo": None, "description": "N/A", "urls": {}, "tags": []}
+    # 2. Metadata & Quote
+    try:
+        info = ticker.info
+        metadata = {
+            "logo": info.get("logo_url"),
+            "description": info.get("description", "N/A"),
+            "urls": {"website": [info.get("website")] if info.get("website") else []},
+            "tags": []
+        }
+        price = float(info.get("regularMarketPrice") or info.get("previousClose") or 0.0)
+        market_cap = float(info.get("marketCap") or 0.0)
+        volume_24h = float(info.get("volume24Hr") or info.get("regularMarketVolume") or 0.0)
+        change_24h = float(info.get("regularMarketChangePercent") or 0.0)
+        name = info.get("name") or info.get("shortName") or symbol
+    except Exception as e:
+        print(f"yFinance Info fetch failed for {symbol}: {e}")
+        metadata = {"logo": None, "description": "N/A", "urls": {}, "tags": []}
+        price = 0.0
+        market_cap = 0.0
+        volume_24h = 0.0
+        change_24h = 0.0
+        name = symbol
 
     # 3. TA & History
     ta_report = analyzer.analyze(symbol)
     history = []
     try:
-        bin_symbol = f"{symbol}USDT"
-        h_res = requests.get(BINANCE_KLINE_URL, params={"symbol": bin_symbol, "interval": "1d", "limit": limit}, timeout=10)
-        if h_res.status_code == 200:
-            for k in reversed(h_res.json()):
-                history.append({"date": time.strftime('%Y-%m-%d', time.gmtime(int(k[0])/1000)), "open": float(k[1]), "high": float(k[2]), "low": float(k[3]), "close": float(k[4]), "volume": float(k[5])})
+        hist_df = ticker.history(period=period)
+        if not hist_df.empty:
+            for ts, row in hist_df.iterrows():
+                history.append({
+                    "date": ts.strftime('%Y-%m-%d'),
+                    "open": float(row['Open']),
+                    "high": float(row['High']),
+                    "low": float(row['Low']),
+                    "close": float(row['Close']),
+                    "volume": float(row['Volume'])
+                })
     except: pass
 
-    # 5. Latest Quote
-    try:
-        res = requests.get(CMC_QUOTES_URL, headers=headers, params={"symbol": symbol, "convert": "USD"}, timeout=10)
-        quote_data_map = res.json().get("data", {})
-        q_list = quote_data_map.get(symbol, [{}])
-        quote_data = q_list[0] if isinstance(q_list, list) else q_list
-        quote = quote_data.get("quote", {}).get("USD", {})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Quote fetch failed: {str(e)}")
-
-    # 6. Monte Carlo Simulation (Last 365 Days)
+    # 4. Monte Carlo Simulation (Last 365 Days)
     monte_carlo = {}
     if HAS_SIMULATOR:
         try:
-            # Fetch 365 days of data for better vol estimation
-            sim_res = requests.get(BINANCE_KLINE_URL, params={"symbol": bin_symbol, "interval": "1d", "limit": 365}, timeout=10)
-            if sim_res.status_code == 200:
-                k_data = sim_res.json()
-                closes = [float(k[4]) for k in k_data]
+            sim_hist = ticker.history(period="1y")
+            if not sim_hist.empty:
+                closes = sim_hist['Close'].tolist()
                 returns = pd.Series(closes).pct_change().dropna()
                 if len(returns) < 5:
                     vol = 0.5 # Fallback 50% vol
@@ -318,7 +356,7 @@ def get_coin_detail(symbol: str, period: str = "1mo"):
                     vol = returns.std() * np.sqrt(365) # Daily annualized
                     mu = returns.mean() * 365
                 
-                current_p = float(quote.get("price", closes[-1]))
+                current_p = price if price > 0 else closes[-1]
                 print(f"[MONTE_CARLO] Running for {symbol} at ${current_p} (Vol: {vol:.2f})")
                 
                 simulator = MonteCarloSimulator({'n_simulations': 5000})
@@ -355,10 +393,10 @@ def get_coin_detail(symbol: str, period: str = "1mo"):
     result = {
         "status": "success",
         "data": {
-            "name": quote_data.get("name"), "symbol": quote_data.get("symbol"),
-            "price": float(quote.get("price", 0.0)), "market_cap": float(quote.get("market_cap", 0.0)),
-            "volume_24h": float(quote.get("volume_24h", 0.0)), "percent_change_24h": float(quote.get("percent_change_24h", 0.0)),
-            "rank": quote_data.get("cmc_rank"), "metadata": metadata,
+            "name": name, "symbol": symbol,
+            "price": price, "market_cap": market_cap,
+            "volume_24h": volume_24h, "percent_change_24h": change_24h,
+            "rank": 0, "metadata": metadata,
             "ta_report": ta_report, "history": history,
             "news": state["rss_cache"], "rate": float(state["usd_idr_rate"]),
             "monte_carlo": monte_carlo
@@ -382,7 +420,7 @@ def search_crypto(q: str = ""):
 
     query = q.lower()
 
-    # Search in-memory cache first (avoids CMC API call for 2000 coins)
+    # Search in-memory cache
     cached_coins = CRYPTO_CACHE.get("top_coins", [])
     if cached_coins:
         results = [
@@ -400,28 +438,7 @@ def search_crypto(q: str = ""):
         ]
         return {"status": "success", "data": results[:50], "source": "cache"}
 
-    # Fallback: live CMC fetch if cache is empty
-    headers = {"X-CMC_PRO_API_KEY": API_KEY, "Accept": "application/json"}
-    try:
-        res = requests.get(CMC_LISTINGS_URL, headers=headers, params={"limit": 500, "convert": "USD"}, timeout=10)
-        data = res.json().get("data", [])
-        results = []
-        for coin in data:
-            if query in coin['name'].lower() or query in coin['symbol'].lower():
-                quote = coin.get("quote", {}).get("USD", {})
-                results.append({
-                    "symbol": coin.get("symbol"),
-                    "name": coin.get("name"),
-                    "rank": coin.get("cmc_rank"),
-                    "price": float(quote.get("price", 0.0)),
-                    "price_idr": float(quote.get("price", 0.0)) * state["usd_idr_rate"],
-                    "market_cap": float(quote.get("market_cap", 0.0)),
-                    "change_24h": float(quote.get("percent_change_24h", 0.0))
-                })
-        return {"status": "success", "data": results[:50]}
-    except Exception as e:
-        print(f"Error Search Crypto: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "success", "data": []}
 
 @app.get("/api/ai/analyze")
 def api_ai_analyze(symbol: str):
@@ -430,11 +447,11 @@ def api_ai_analyze(symbol: str):
         ta_report = analyzer.analyze(symbol)
         history = []
         try:
-            bin_symbol = f"{symbol}USDT"
-            h_res = requests.get(BINANCE_KLINE_URL, params={"symbol": bin_symbol, "interval": "1d", "limit": 30}, timeout=5)
-            if h_res.status_code == 200:
-                for k in h_res.json():
-                    history.append({"close": float(k[4]), "volume": float(k[5])})
+            ticker = yf.Ticker(f"{symbol}-USD")
+            hist_df = ticker.history(period="1mo")
+            if not hist_df.empty:
+                for ts, row in hist_df.iterrows():
+                    history.append({"close": float(row['Close']), "volume": float(row['Volume'])})
         except: pass
         
         price = history[-1]['close'] if history else 0
@@ -447,7 +464,6 @@ def api_ai_analyze(symbol: str):
 @app.get("/api/crypto/stats/seasonality/{symbol}")
 def get_crypto_seasonality(symbol: str):
     try:
-        import yfinance as yf
         ticker_symbol = f"{symbol}-USD"
         ticker = yf.Ticker(ticker_symbol)
         df = ticker.history(period="10y")
@@ -487,8 +503,9 @@ async def root():
 
 @app.on_event("startup")
 async def startup_event():
+    asyncio.create_task(fetch_metadata_loop())
     asyncio.create_task(fetch_top_coins_loop())
 
 if __name__ == "__main__":
-    print("=:: MEMULAI SERVICE PYTHON CRYPTO DATA (v9 + Live RSS parsing) ::=")
-    uvicorn.run("crypto_service:app", log_level="debug",  port=8085, reload=False)
+    print("=:: MEMULAI SERVICE PYTHON CRYPTO DATA (v9 + yFinance) ::=")
+    uvicorn.run("crypto_service:app", host="0.0.0.0", port=8085, reload=False)
