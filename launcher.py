@@ -130,27 +130,40 @@ SERVICE_PORTS = {
 def clean_port(port):
     if not port: return
     try:
-        # Gunakan regex untuk mencari PID secara lebih akurat pada output netstat
-        cmd = f'netstat -ano | findstr LISTENING | findstr :{port}'
-        output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode()
-        
-        pids_to_kill = set()
-        for line in output.splitlines():
-            line = line.strip()
-            # Pastikan port cocok tepat (misal menghindari 5008 mencocokkan 50080)
-            if f':{port} ' in line or f':{port}\t' in line:
-                parts = line.split()
-                if len(parts) >= 5:
-                    pid = parts[-1]
-                    if pid != '0': pids_to_kill.add(pid)
-        
-        for pid in pids_to_kill:
-            print(f"[SYSTEM] PORT_{port} CONFLICT! FORCING SHUTDOWN PID_{pid}...")
-            subprocess.run(f'taskkill /F /PID {pid}', shell=True, capture_output=True)
-            time.sleep(1.2) # Jeda agar socket benar-benar dilepas oleh Windows
+        if os.name == 'nt':
+            # Windows implementation
+            cmd = f'netstat -ano | findstr LISTENING | findstr :{port}'
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode()
             
-    except subprocess.CalledProcessError:
-        pass # Port bersih
+            pids_to_kill = set()
+            for line in output.splitlines():
+                line = line.strip()
+                if f':{port} ' in line or f':{port}\t' in line:
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        pid = parts[-1]
+                        if pid != '0': pids_to_kill.add(pid)
+            
+            for pid in pids_to_kill:
+                print(f"[SYSTEM] PORT_{port} CONFLICT! FORCING SHUTDOWN PID_{pid}...")
+                subprocess.run(f'taskkill /F /PID {pid}', shell=True, capture_output=True)
+                time.sleep(1.2)
+        else:
+            # Linux/Ubuntu implementation
+            try:
+                # Using 'ss' or 'lsof' to find PID on Linux
+                cmd = f"lsof -t -i:{port}"
+                output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode().strip()
+                if output:
+                    pids = output.split('\n')
+                    for pid in pids:
+                        if pid:
+                            print(f"[SYSTEM] PORT_{port} CONFLICT! FORCING SHUTDOWN PID_{pid}...")
+                            subprocess.run(f'kill -9 {pid}', shell=True, capture_output=True)
+                            time.sleep(0.5)
+            except subprocess.CalledProcessError:
+                pass # Port is clean
+            
     except Exception as e:
         print(f"[SYSTEM] ERROR CLEANING PORT {port}: {e}")
 

@@ -818,4 +818,4 @@ if __name__ == '__main__':
         log.info(f"MASTER NODE port={args.port} — ALL categories")
 
     threading.Thread(target=update_news_cache_loop, args=(assigned_cats or None,), daemon=True).start()
-    app.run(debug=False, port=args.port, use_reloader=False)
+    app.run(host=os.getenv('API_HOST', '0.0.0.0'), debug=False, port=args.port, use_reloader=False)

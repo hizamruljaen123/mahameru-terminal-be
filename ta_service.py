@@ -620,4 +620,4 @@ if __name__ == '__main__':
     print("  ASETPEDIA TA SERVICE — PORT 5007")
     print(f"  TA-Lib: {'ENABLED' if TALIB_AVAILABLE else 'FALLBACK MODE'}")
     print("=" * 60)
-    app.run(port=5007, debug=False)
+    app.run(host=os.getenv('API_HOST', '0.0.0.0'), port=5007, debug=False)

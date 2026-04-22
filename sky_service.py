@@ -69,4 +69,4 @@ def get_route(callsign):
 
 if __name__ == '__main__':
     print("Starting Sky/Aviation Service on port 5002...")
-    app.run(debug=True, port=5002, use_reloader=False)
+    app.run(host=os.getenv('API_HOST', '0.0.0.0'), debug=True, port=5002, use_reloader=False)

@@ -119,4 +119,4 @@ def get_tv_channels():
 if __name__ == '__main__':
     print("Initializing Unified TV Intelligence Backend v2.0...")
     print("Listening on http://localhost:5003")
-    app.run(debug=True, port=5003, use_reloader=False)
+    app.run(host=os.getenv('API_HOST', '0.0.0.0'), debug=True, port=5003, use_reloader=False)
