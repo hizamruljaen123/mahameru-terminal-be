@@ -1,0 +1,6 @@
+.env
+*.log
+logs/
+__pycache__/
+*.py[cod]
+data/news_cache.db

@@ -1,0 +1,437 @@
+[
+  {
+    "group": "General",
+    "name": "Business",
+    "url": "https://iptv-org.github.io/iptv/categories/business.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Canada",
+    "url": "https://iptv-org.github.io/iptv/countries/ca.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "China",
+    "url": "https://iptv-org.github.io/iptv/countries/cn.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Denmark",
+    "url": "https://iptv-org.github.io/iptv/countries/dk.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Egypt",
+    "url": "https://iptv-org.github.io/iptv/countries/eg.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "France",
+    "url": "https://iptv-org.github.io/iptv/countries/fr.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Germany",
+    "url": "https://iptv-org.github.io/iptv/countries/de.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Hong Kong",
+    "url": "https://iptv-org.github.io/iptv/countries/hk.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "India",
+    "url": "https://iptv-org.github.io/iptv/countries/in.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Indonesia",
+    "url": "https://iptv-org.github.io/iptv/countries/id.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Iran",
+    "url": "https://iptv-org.github.io/iptv/countries/ir.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Iraq",
+    "url": "https://iptv-org.github.io/iptv/countries/iq.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Ireland",
+    "url": "https://iptv-org.github.io/iptv/countries/ie.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Israel",
+    "url": "https://iptv-org.github.io/iptv/countries/il.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Italy",
+    "url": "https://iptv-org.github.io/iptv/countries/it.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Japan",
+    "url": "https://iptv-org.github.io/iptv/countries/jp.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Kuwait",
+    "url": "https://iptv-org.github.io/iptv/countries/kw.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Malaysia",
+    "url": "https://iptv-org.github.io/iptv/countries/my.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Mexico",
+    "url": "https://iptv-org.github.io/iptv/countries/mx.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Malta",
+    "url": "https://iptv-org.github.io/iptv/countries/mt.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Macao",
+    "url": "https://iptv-org.github.io/iptv/countries/mo.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Luxembourg",
+    "url": "https://iptv-org.github.io/iptv/countries/lu.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Monaco",
+    "url": "https://iptv-org.github.io/iptv/countries/mc.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Netherlands",
+    "url": "https://iptv-org.github.io/iptv/countries/nl.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "New Zealand",
+    "url": "https://iptv-org.github.io/iptv/countries/nz.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Pakistan",
+    "url": "https://iptv-org.github.io/iptv/countries/pk.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Palestine",
+    "url": "https://iptv-org.github.io/iptv/countries/ps.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Philippines",
+    "url": "https://iptv-org.github.io/iptv/countries/ph.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Poland",
+    "url": "https://iptv-org.github.io/iptv/countries/pl.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Portugal",
+    "url": "https://iptv-org.github.io/iptv/countries/pt.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Russia",
+    "url": "https://iptv-org.github.io/iptv/countries/ru.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Saudi Arabia",
+    "url": "https://iptv-org.github.io/iptv/countries/sa.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Singapore",
+    "url": "https://iptv-org.github.io/iptv/countries/sg.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "South Africa",
+    "url": "https://iptv-org.github.io/iptv/countries/za.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "South Korea",
+    "url": "https://iptv-org.github.io/iptv/countries/kr.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Spain",
+    "url": "https://iptv-org.github.io/iptv/countries/es.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Sweden",
+    "url": "https://iptv-org.github.io/iptv/countries/se.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Switzerland",
+    "url": "https://iptv-org.github.io/iptv/countries/ch.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Syria",
+    "url": "https://iptv-org.github.io/iptv/countries/sy.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Taiwan",
+    "url": "https://iptv-org.github.io/iptv/countries/tw.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Tunisia",
+    "url": "https://iptv-org.github.io/iptv/countries/tn.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Turkiye",
+    "url": "https://iptv-org.github.io/iptv/countries/tr.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "United Arab Emirates",
+    "url": "https://iptv-org.github.io/iptv/countries/ae.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "United Kingdom",
+    "url": "https://iptv-org.github.io/iptv/countries/uk.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "Wales",
+    "url": "https://iptv-org.github.io/iptv/subdivisions/gb-wls.m3u"
+  },
+  {
+    "group": "Country",
+    "name": "United States",
+    "url": "https://iptv-org.github.io/iptv/countries/us.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Africa",
+    "url": "https://iptv-org.github.io/iptv/regions/afr.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Americas",
+    "url": "https://iptv-org.github.io/iptv/regions/amer.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Arab world",
+    "url": "https://iptv-org.github.io/iptv/regions/arab.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Asia",
+    "url": "https://iptv-org.github.io/iptv/regions/asia.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Asia-Pacific",
+    "url": "https://iptv-org.github.io/iptv/regions/apac.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "ASEAN",
+    "url": "https://iptv-org.github.io/iptv/regions/asean.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Balkan",
+    "url": "https://iptv-org.github.io/iptv/regions/balkan.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Benelux",
+    "url": "https://iptv-org.github.io/iptv/regions/benelux.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Caribbean",
+    "url": "https://iptv-org.github.io/iptv/regions/carib.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Central America",
+    "url": "https://iptv-org.github.io/iptv/regions/cenamer.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "CEE",
+    "url": "https://iptv-org.github.io/iptv/regions/cee.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Central Asia",
+    "url": "https://iptv-org.github.io/iptv/regions/cas.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Central Europe",
+    "url": "https://iptv-org.github.io/iptv/regions/ceu.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "CIS",
+    "url": "https://iptv-org.github.io/iptv/regions/cis.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "East Africa",
+    "url": "https://iptv-org.github.io/iptv/regions/eaf.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "East Asia",
+    "url": "https://iptv-org.github.io/iptv/regions/eas.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Europe",
+    "url": "https://iptv-org.github.io/iptv/regions/eur.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "EMEA",
+    "url": "https://iptv-org.github.io/iptv/regions/emea.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "EU",
+    "url": "https://iptv-org.github.io/iptv/regions/eu.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "GCC",
+    "url": "https://iptv-org.github.io/iptv/regions/gcc.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Hispanic America",
+    "url": "https://iptv-org.github.io/iptv/regions/hispam.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Latin America",
+    "url": "https://iptv-org.github.io/iptv/regions/latam.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "LAC",
+    "url": "https://iptv-org.github.io/iptv/regions/lac.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Maghreb",
+    "url": "https://iptv-org.github.io/iptv/regions/maghreb.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Middle East",
+    "url": "https://iptv-org.github.io/iptv/regions/mideast.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "MENA",
+    "url": "https://iptv-org.github.io/iptv/regions/mena.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Nordics",
+    "url": "https://iptv-org.github.io/iptv/regions/nord.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "North America",
+    "url": "https://iptv-org.github.io/iptv/regions/noram.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Northern America",
+    "url": "https://iptv-org.github.io/iptv/regions/nam.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Northern Europe",
+    "url": "https://iptv-org.github.io/iptv/regions/neu.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Oceania",
+    "url": "https://iptv-org.github.io/iptv/regions/oce.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "South America",
+    "url": "https://iptv-org.github.io/iptv/regions/southam.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "South Asia",
+    "url": "https://iptv-org.github.io/iptv/regions/sas.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Southeast Asia",
+    "url": "https://iptv-org.github.io/iptv/regions/sea.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Southern Africa",
+    "url": "https://iptv-org.github.io/iptv/regions/saf.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Southern Europe",
+    "url": "https://iptv-org.github.io/iptv/regions/ser.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Sub-Saharan Africa",
+    "url": "https://iptv-org.github.io/iptv/regions/ssa.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "UN",
+    "url": "https://iptv-org.github.io/iptv/regions/un.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "West Africa",
+    "url": "https://iptv-org.github.io/iptv/regions/waf.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "West Asia",
+    "url": "https://iptv-org.github.io/iptv/regions/was.m3u"
+  },
+  {
+    "group": "Region",
+    "name": "Western Europe",
+    "url": "https://iptv-org.github.io/iptv/regions/wer.m3u"
+  }
+]

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASETPEDIA | 10-ASSET WALL</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;900&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --bg: #0b0e11;
+            --surface: #1e2329;
+            --text: #eaecef;
+            --green: #0ecb81;
+            --red: #f6465d;
+            --border: #30363d;
+            --accent: #fcd535;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            height: 40px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        .logo { font-weight: 900; color: var(--accent); }
+
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 1px;
+            background: var(--border);
+            overflow: hidden;
+        }
+
+        .asset-card {
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            min-height: 0;
+        }
+
+        .card-header {
+            padding: 6px 10px;
+            background: var(--surface);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .symbol-name { font-weight: bold; color: var(--accent); }
+        .live-price { font-family: 'JetBrains Mono'; font-weight: bold; }
+
+        .card-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .chart-box {
+            flex: 1;
+            background: #000;
+            position: relative;
+        }
+
+        .trade-tape {
+            flex: 1.5;
+            overflow: hidden;
+            font-family: 'JetBrains Mono';
+            font-size: 10px;
+            background: #000;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        .trade-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            padding: 3px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            animation: slide-in 0.2s ease-out;
+        }
+
+        .price-up { color: var(--green); font-weight: bold; }
+        .price-down { color: var(--red); font-weight: bold; }
+        .qty { color: #eaecef; opacity: 0.6; }
+
+        @keyframes flash-green { from { background: rgba(14,203,129,0.3); } to { background: transparent; } }
+        @keyframes flash-red { from { background: rgba(246,70,93,0.3); } to { background: transparent; } }
+        .flash-up { animation: flash-green 0.4s; }
+        .flash-down { animation: flash-red 0.4s; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">ASETPEDIA 10-ASSET WALL</div>
+        <div id="connection-status" style="font-size: 10px; color: var(--green);">● SYSTEM LIVE</div>
+    </header>
+
+    <main id="wall-grid"></main>
+
+    <script>
+        const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'TRXUSDT', 'DOTUSDT', 'LINKUSDT'];
+        const wallGrid = document.getElementById('wall-grid');
+        const assets = {};
+
+        // Initialize Grid
+        symbols.forEach(s => {
+            const card = document.createElement('div');
+            card.className = 'asset-card';
+            card.innerHTML = `
+                <div class="card-header">
+                    <span class="symbol-name">${s.replace('USDT', '')}</span>
+                    <span class="live-price" id="price-${s}">0.00</span>
+                </div>
+                <div class="card-body">
+                    <div class="chart-box" id="chart-${s}"></div>
+                    <div class="ob-header-row" style="background:#161a1e; color:#accent">MARKET HISTORY</div>
+                    <div class="trade-tape" id="trades-${s}"></div>
+                </div>
+            `;
+            wallGrid.appendChild(card);
+
+            // Initialize Chart
+            const chart = LightweightCharts.createChart(document.getElementById(`chart-${s}`), {
+                layout: { background: { color: '#0b0e11' }, textColor: '#848e9c' },
+                grid: { vertLines: { visible: false }, horzLines: { color: '#101418' } },
+                timeScale: { visible: false },
+                rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.1, bottom: 0.1 } },
+                handleScroll: false, handleScale: false
+            });
+            const series = chart.addCandlestickSeries({
+                upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false,
+                wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
+            });
+
+            assets[s] = { chart, series, lastPrice: 0 };
+            initHistoricalData(s);
+        });
+
+        async function initHistoricalData(s) {
+            try {
+                const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${s}&interval=1m&limit=100`);
+                const data = await res.json();
+                const ohlc = data.map(d => ({
+                    time: d[0] / 1000,
+                    open: parseFloat(d[1]),
+                    high: parseFloat(d[2]),
+                    low: parseFloat(d[3]),
+                    close: parseFloat(d[4])
+                }));
+                assets[s].series.setData(ohlc);
+            } catch (e) { console.error("History fail:", s, e); }
+        }
+
+        // Multi-Stream Optimization
+        symbols.forEach(s => {
+            const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${s.toLowerCase()}@kline_1m/${s.toLowerCase()}@trade`);
+            
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                
+                // Kline handling (OHLC for Candlesticks)
+                if (data.e === 'kline') {
+                    const k = data.k;
+                    assets[s].series.update({
+                        time: k.t / 1000,
+                        open: parseFloat(k.o),
+                        high: parseFloat(k.h),
+                        low: parseFloat(k.l),
+                        close: parseFloat(k.c)
+                    });
+                    
+                    const priceEl = document.getElementById(`price-${s}`);
+                    const newPrice = parseFloat(k.c);
+                    
+                    if (newPrice > assets[s].lastPrice) priceEl.className = 'live-price price-up flash-up';
+                    else if (newPrice < assets[s].lastPrice) priceEl.className = 'live-price price-down flash-down';
+                    
+                    priceEl.innerText = newPrice.toFixed(s.includes('DOGE') ? 4 : 2);
+                    assets[s].lastPrice = newPrice;
+                }
+
+                // Trade Handling
+                if (data.e === 'trade') {
+                    addMiniTrade(s, data.p, data.q, data.m);
+                }
+            };
+        });
+
+        function addMiniTrade(s, price, qty, isSeller) {
+            const container = document.getElementById(`trades-${s}`);
+            const row = document.createElement('div');
+            row.className = 'trade-row new-row';
+            const color = isSeller ? 'var(--red)' : 'var(--green)';
+            const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            row.innerHTML = `<span style="color:${color}">${parseFloat(price).toFixed(s.includes('DOGE') ? 4 : 2)}</span> <span class="qty">${parseFloat(qty).toFixed(3)}</span> <span style="opacity:0.4">${time}</span>`;
+            
+            container.appendChild(row);
+            if (container.children.length > 8) container.removeChild(container.firstChild);
+        }
+
+        window.addEventListener('resize', () => {
+            symbols.forEach(s => {
+                const box = document.getElementById(`chart-${s}`);
+                assets[s].chart.applyOptions({ width: box.clientWidth, height: box.clientHeight });
+            });
+        });
+    </script>
+</body>
+</html>
