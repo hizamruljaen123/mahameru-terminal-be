@@ -195,24 +195,13 @@ def migrate_articles(articles, emit_realtime=True):
         if inserted > 0:
             log.info(f"ARCHIVED: +{inserted} new | {skipped} skipped | total={_stats['archived']}")
 
-            # === REAL-TIME BROADCAST via SocketIO ===
-            if emit_realtime and newly_inserted:
-                try:
-                    socketio.emit('new_articles', {
-                        'count': inserted,
-                        'articles': newly_inserted[:50]  # limit payload
-                    })
-                    log.info(f"SOCKET_EMIT: Broadcasted {len(newly_inserted)} articles to clients")
-                except Exception as e:
-                    log.warning(f"SocketIO emit failed: {e}")
-
-        return inserted
+        return inserted, newly_inserted
 
     except Exception as e:
         log.error(f"migrate_articles error: {e}", exc_info=True)
         with _stats_lock:
             _stats['errors'] += 1
-        return 0
+        return 0, []
 
 
 # ============================================================
@@ -264,7 +253,14 @@ def background_archiver():
                 all_articles.extend(cat_items)
 
             if all_articles:
-                migrate_articles(all_articles, emit_realtime=True)
+                inserted_count, newly_inserted = migrate_articles(all_articles, emit_realtime=False)
+                if inserted_count > 0 and newly_inserted:
+                    # Broadcast in background
+                    socketio.start_background_task(
+                        broadcast_new_articles, 
+                        inserted_count, 
+                        newly_inserted
+                    )
 
         except Exception as e:
             log.error(f"Background archiver loop error: {e}")
@@ -291,6 +287,17 @@ def on_subscribe(data):
     log.info(f"CLIENT {request.sid} subscribed to: {categories}")
     emit('subscribed', {'categories': categories})
 
+def broadcast_new_articles(count, articles):
+    """Helper to broadcast articles safely in a background task"""
+    try:
+        socketio.emit('new_articles', {
+            'count': count,
+            'articles': articles[:50]  # limit payload
+        })
+        log.info(f"SOCKET_EMIT: Broadcasted {len(articles)} articles to clients")
+    except Exception as e:
+        log.warning(f"SocketIO broadcast task failed: {e}")
+
 
 # ============================================================
 # REST ENDPOINTS
@@ -298,12 +305,26 @@ def on_subscribe(data):
 @app.route('/api/backup/push', methods=['POST'])
 def push_articles():
     """Receive batch articles from news_service nodes"""
-    data = request.json
-    if not data:
-        return jsonify({"error": "No payload"}), 400
-    articles = data.get('articles', [])
-    count = migrate_articles(articles, emit_realtime=True)
-    return jsonify({"success": True, "inserted": count})
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "No payload"}), 400
+        
+        articles = data.get('articles', [])
+        count, newly_inserted = migrate_articles(articles, emit_realtime=False)
+        
+        if count > 0 and newly_inserted:
+            # Important: start broadcast in background to avoid interfering with HTTP response
+            socketio.start_background_task(
+                broadcast_new_articles, 
+                count, 
+                newly_inserted
+            )
+            
+        return jsonify({"success": True, "inserted": count})
+    except Exception as e:
+        log.error(f"API_PUSH_ERROR: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/backup/cleanup', methods=['POST'])
@@ -385,6 +406,18 @@ def get_latest():
 # ENTRYPOINT
 # ============================================================
 if __name__ == '__main__':
-    threading.Thread(target=background_archiver, daemon=True).start()
     log.info("BACKUP_SERVICE: Starting on port 5004 with SocketIO...")
-    socketio.run(app, host='0.0.0.0', port=5004, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+    
+    # Use socketio.start_background_task for better compatibility with async modes
+    socketio.start_background_task(background_archiver)
+    
+    # In Python 3.13+, Werkzeug 3.x is stricter. 
+    # Ensuring we run in a way that minimizes context interference.
+    socketio.run(
+        app, 
+        host='0.0.0.0', 
+        port=5004, 
+        debug=False, 
+        use_reloader=False, 
+        allow_unsafe_werkzeug=True
+    )
