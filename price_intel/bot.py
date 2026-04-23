@@ -154,7 +154,8 @@ class PriceIntelligenceBot:
             return
             
         # Analyze
-        analyzed_news = SentimentAnalyzer.analyze_batch(all_news)
+        self.sentiment_analyzer.analyze_news_batch(all_news)
+        analyzed_news = all_news # analyze_news_batch modifies in place
         
         caption = f"<b>📰 NEWS FEED: {keyword.upper()}</b>\n"
         caption += f"<i>Analyzing 10 latest articles (Global & ID)</i>\n"

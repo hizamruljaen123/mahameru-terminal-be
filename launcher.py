@@ -48,6 +48,7 @@ TIER0 = [
 TIER1 = [
     [PYTHON_EXE, get_p("sentiment_service.py")],      # Port 5008
     [PYTHON_EXE, get_p("entity_service.py")],         # Port 5005
+    [PYTHON_EXE, get_p("entity_correlation_service.py")], # Port 8200
     [PYTHON_EXE, get_p("ta_service.py")],             # Port 5007
     [PYTHON_EXE, get_p("deep_ta_service.py")],        # Port 5200
 ]
@@ -129,8 +130,9 @@ SERVICE_PORTS = {
     "government_facility_service.py": [8150],
     "military_service.py": [8160],
     "crypto_stream_service.py": [8092],
+    "entity_correlation_service.py": [8200],
     "dashboard_service.py": [8000],
-    # Removed Telegram
+    # Telegram handled by price_intelligence_service.py
 
 }
 
@@ -233,8 +235,9 @@ def main():
             [PYTHON_EXE, get_p("geo_data_service.py")],
             [PYTHON_EXE, get_p("crypto_stream_service.py")],
             [PYTHON_EXE, get_p("backup_service.py")],
+            [PYTHON_EXE, get_p("entity_correlation_service.py")],
             [PYTHON_EXE, get_p("price_intelligence_service.py")],
-            # Removed Telegram Service
+            # Telegram Service (Active via Price Intel)
 
         ]
         for cmd in DEV_SERVICES:
