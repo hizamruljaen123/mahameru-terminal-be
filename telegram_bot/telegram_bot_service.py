@@ -73,14 +73,22 @@ class DirectTelegramBot:
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
                     if member.get("username") == self.bot_username:
+                        # Print highly visible notice to terminal console
+                        print("\n" + "="*50)
+                        print(f"🔔 CONFIG NOTICE: Bot joined group!")
+                        print(f"👉 CHAT ID: {chat_id}")
+                        print(f"👉 Group Name: {message['chat'].get('title')}")
+                        print("="*50 + "\n")
+                        
                         logger.info(f"✨ Bot joined new group: {chat_id}")
                         welcome_text = (
                             "👋 *Greetings, Mahameru Terminal Intelligence is Online!*\n\n"
                             "Saya telah berhasil terintegrasi dengan grup ini. Saya siap menyajikan data pasar, "
                             "analisis AI, dan intelijen pasar terbaru.\n\n"
+                            "📌 *Chat ID Grup Ini:* `" + str(chat_id) + "`\n"
+                            "*(Salin ID di atas jika ingin mengunci bot ke grup ini di file .env)*\n\n"
                             "📌 *Cara Menggunakan:* Tag saya dan masukkan perintah.\n"
-                            "Contoh: `@mahameruTerminal_bot /update TSLA`\n\n"
-                            "Ketik `/start` untuk melihat daftar lengkap perintah."
+                            "Contoh: `@mahameruTerminal_bot /update TSLA`"
                         )
                         BotHandlers._send_message(self.token, chat_id, welcome_text)
                         return
