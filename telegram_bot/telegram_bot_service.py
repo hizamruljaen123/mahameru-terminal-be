@@ -85,21 +85,23 @@ class DirectTelegramBot:
                 logger.warning(f"Rejected access from Chat ID: {chat_id}")
                 return
 
-            # 3. TAG & MENTION HANDLING
+            # 3. TAG & MENTION HANDLING (MANDATORY FOR GROUPS)
             is_mentioned = False
             bot_tag = f"@{self.bot_username}".lower() if self.bot_username else ""
             
             if chat_type in ["group", "supergroup"]:
+                # Wajib ada mention @botname di dalam teks
                 if bot_tag and bot_tag in text.lower():
                     is_mentioned = True
-                    # Clean up the tag from the command
+                    # Bersihkan tag agar tidak mengganggu argumen perintah
                     import re
                     text = re.compile(re.escape(bot_tag), re.IGNORECASE).sub("", text).strip()
+                else:
+                    # Abaikan jika tidak di-tag di grup
+                    return
             else:
-                # Private chats are always responded to
+                # Di Private Chat (DM), tidak perlu tag
                 is_mentioned = True
-
-            if not is_mentioned: return
 
             # 4. COMMAND DISPATCHER
             parts = text.split()
