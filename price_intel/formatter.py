@@ -142,3 +142,91 @@ class PriceFormatter:
         caption += "<i>Source: Google News & AI Sentiment Engine</i>"
         
         return caption
+
+    @staticmethod
+    def create_deep_ta_chart(ohlcv_data: List[Dict], analysis: Any, method_id: str, symbol: str) -> io.BytesIO:
+        """Create advanced institutional-grade charts for Deep TA"""
+        df = pd.DataFrame(ohlcv_data)
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        
+        # We only plot the last 100 bars for clarity
+        plot_df = df.tail(100).copy()
+        
+        # Prepare analysis data
+        try:
+            ana_df = pd.DataFrame(analysis)
+            # Find the index if not present
+            if 'index' in ana_df.columns:
+                ana_df.set_index(pd.to_datetime(ana_df['index']), inplace=True)
+            else:
+                ana_df.index = df.index[-len(ana_df):]
+            
+            ana_plot = ana_df.tail(100)
+        except:
+            ana_plot = pd.DataFrame()
+
+        fig, axes = mpf.plot(
+            plot_df,
+            type='candle',
+            style='charles',
+            title=f"\nDeep Analysis: {method_id.upper()} - {symbol}",
+            ylabel='Price',
+            volume=True,
+            returnfig=True,
+            figsize=(12, 8),
+            tight_layout=True,
+            facecolor='#121212'
+        )
+        
+        ax_main = axes[0]
+        ax_vol = axes[2]
+        
+        # Specialized Overlays
+        if method_id == "master" and not ana_plot.empty and 'master_signal_score' in ana_plot.columns:
+            ax_vol.set_visible(False)
+            ax_master = fig.add_axes(ax_vol.get_position())
+            ax_master.plot(ana_plot.index, ana_plot['master_signal_score'], color='gold', lw=2, label='Master Score')
+            ax_master.fill_between(ana_plot.index, 0, ana_plot['master_signal_score'], color='gold', alpha=0.2)
+            ax_master.set_ylabel('Master Score', color='white')
+            ax_master.tick_params(axis='y', colors='white')
+            ax_master.axhline(0, color='white', ls='--', alpha=0.3)
+
+        elif method_id == "market_regime" and not ana_plot.empty and 'market_regime' in ana_plot.columns:
+            # 0=Ranging, 1=TrendUp, 2=TrendDown, 3=Volatile
+            colors = {0: 'gray', 1: 'green', 2: 'red', 3: 'purple'}
+            for i in range(len(ana_plot)):
+                regime = ana_plot['market_regime'].iloc[i]
+                if not np.isnan(regime):
+                    ax_main.axvspan(ana_plot.index[-len(ana_plot)+i], ana_plot.index[-len(ana_plot)+i], 
+                                   color=colors.get(int(regime), 'white'), alpha=0.1)
+
+        elif method_id == "vdelta" and not ana_plot.empty and 'imbalance_ratio' in ana_plot.columns:
+            ax_vol.set_visible(False)
+            ax_delta = fig.add_axes(ax_vol.get_position())
+            colors = ['green' if x > 0 else 'red' for x in ana_plot['imbalance_ratio']]
+            ax_delta.bar(ana_plot.index, ana_plot['imbalance_ratio'], color=colors, alpha=0.8)
+            ax_delta.set_ylabel('Delta Ratio', color='white')
+            ax_delta.tick_params(axis='y', colors='white')
+
+        elif method_id == "spectral" and not ana_plot.empty and 'dominant_cycle_period' in ana_plot.columns:
+            ax_vol.set_visible(False)
+            ax_spec = fig.add_axes(ax_vol.get_position())
+            ax_spec.plot(ana_plot.index, ana_plot['dominant_cycle_period'], color='cyan', lw=1.5)
+            ax_spec.set_ylabel('Cycle Period', color='white')
+            ax_spec.tick_params(axis='y', colors='white')
+            
+        elif method_id == "smc" and not ana_plot.empty and 'break_of_structure' in ana_plot.columns:
+            bos = ana_plot[ana_plot['break_of_structure'] != 0]
+            for idx, row in bos.iterrows():
+                try:
+                    price_pt = plot_df.loc[idx, 'high' if row['break_of_structure'] > 0 else 'low']
+                    color = 'lime' if row['break_of_structure'] > 0 else 'magenta'
+                    ax_main.plot(idx, price_pt, marker='o', color=color, markersize=8)
+                except: continue
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=120, facecolor='#121212')
+        buf.seek(0)
+        plt.close(fig)
+        return buf

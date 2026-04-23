@@ -8,6 +8,7 @@ import queue
 from .analyzer import PriceAnalyzer
 from .formatter import PriceFormatter
 from .sentiment import SentimentAnalyzer
+from .deep_ta import DeepTAClient
 
 logger = logging.getLogger("PriceIntel.Bot")
 
@@ -65,6 +66,11 @@ class PriceIntelligenceBot:
                 self.send_report(symbol, target_chat_id)
             elif task_type == "sentinews":
                 self.send_sentiment_report(symbol, target_chat_id)
+            elif task_type == "deep_ta":
+                # For deep_ta, symbol is a tuple or we use extra args
+                # Let's assume symbol for deep_ta is "METHOD:SYMBOL"
+                method, actual_symbol = symbol.split(":")
+                self.send_deep_ta_report(actual_symbol, method, target_chat_id)
         finally:
             # Always try to delete the loading message
             if loading_id:
@@ -133,6 +139,32 @@ class PriceIntelligenceBot:
         except Exception as e:
             logger.error(f"❌ Error sending to Telegram: {e}")
 
+    def send_deep_ta_report(self, symbol: str, method: str, target_chat_id: str):
+        logger.info(f"Generating Deep TA ({method}) for {symbol} to chat {target_chat_id}...")
+        
+        data = DeepTAClient.get_deep_analysis(symbol, method)
+        if data is None:
+            self.send_message(target_chat_id, f"❌ Deep Analysis failed for <b>{symbol}</b> using <b>{method}</b>. Ensure the Deep TA service is running.")
+            return
+        
+        chart_buf = PriceFormatter.create_deep_ta_chart(
+            data["ohlcv"], data["analysis"], data["method_id"], symbol
+        )
+        
+        caption = f"<b>🔬 DEEP TA: {data['method_name']}</b>\n"
+        caption += f"<code>Symbol: {symbol} | Method ID: {data['method_id']}</code>\n"
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        caption += "<i>Advanced institutional analysis processed from the last 100 data points.</i>"
+
+        url = f"{self.api_url}/sendPhoto"
+        files = {'photo': ('deep_ta.png', chart_buf, 'image/png')}
+        payload = {'chat_id': target_chat_id, 'caption': caption, 'parse_mode': 'HTML'}
+        
+        try:
+            requests.post(url, files=files, data=payload)
+        except Exception as e:
+            logger.error(f"❌ Error sending Deep TA to Telegram: {e}")
+
     def send_message(self, target_chat_id: str, text: str):
         url = f"{self.api_url}/sendMessage"
         payload = {'chat_id': target_chat_id, 'text': text, 'parse_mode': 'HTML'}
@@ -161,6 +193,44 @@ class PriceIntelligenceBot:
                 self.task_queue.put(("sentinews", cmd_parts[1].upper(), chat_id))
             else:
                 self.send_message(chat_id, "ℹ️ Usage: <code>/mt_sentinews [SYMBOL]</code>")
+        
+        elif cmd == "/mt_tda":
+            if len(cmd_parts) > 2:
+                method = cmd_parts[1].lower()
+                symbol = cmd_parts[2].upper()
+                # Use a specific format for the queue task
+                self.task_queue.put(("deep_ta", f"{method}:{symbol}", chat_id))
+            else:
+                self.send_message(chat_id, "ℹ️ Usage: <code>/mt_tda [METHOD] [SYMBOL]</code>\nMethods: <code>master, regime, vdelta, spectral, smc</code>")
+
+        elif cmd == "/mt_help":
+            help_text = (
+                "<b>🛠️ MAHAMERU TERMINAL - COMMAND HELP</b>\n\n"
+                "<b>1. Analisis Pasar Real-time</b>\n"
+                "<code>/mt_market_update [SYMBOL]</code>\n"
+                "Deskripsi: Dashboard kuantitatif, indikator teknikal (RSI, ADX, BB), dan grafik candlestick.\n"
+                "Contoh: <code>/mt_market_update AAPL</code>\n\n"
+                
+                "<b>2. Analisis Sentimen AI</b>\n"
+                "<code>/mt_sentinews [SYMBOL]</code>\n"
+                "Deskripsi: Analisis sentimen berita terbaru menggunakan AI (BERT & FinBERT).\n"
+                "Contoh: <code>/mt_sentinews BBCA.JK</code>\n\n"
+                
+                "<b>3. Analisis Teknikal Mendalam (Deep TA)</b>\n"
+                "<code>/mt_tda [METODE] [SYMBOL]</code>\n"
+                "Deskripsi: Analisis tingkat institusi dengan visualisasi canggih.\n"
+                "Metode:\n"
+                "- <code>master</code>: Skor AI Komposit\n"
+                "- <code>regime</code>: Deteksi Fase Market\n"
+                "- <code>vdelta</code>: Tekanan Beli/Jual\n"
+                "- <code>spectral</code>: Analisis Siklus Harga\n"
+                "- <code>smc</code>: Smart Money Concepts (BOS)\n"
+                "Contoh: <code>/mt_tda smc BTC-USD</code>\n\n"
+                
+                "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                "<i>Gunakan simbol yfinance (misal: .JK untuk IHSG, -USD untuk Crypto).</i>"
+            )
+            self.send_message(chat_id, help_text)
 
     def worker(self):
         """Background worker to process the task queue sequentially"""
