@@ -91,6 +91,11 @@ TIER4 = [
     [PYTHON_EXE, get_p("dashboard_service.py")],     # Port 8000
 ]
 
+# TIER 5: EXTERNAL CONNECTORS (Telegram, Webhook, etc.)
+TIER5 = [
+    [PYTHON_EXE, get_p(os.path.join("telegram_bot", "main.py"))],
+]
+
 SERVICE_PORTS = {
     "news_service.py": [5101, 5102, 5103, 5104, 5105],
     "backup_service.py": [5004],
@@ -225,13 +230,14 @@ def main():
             [PYTHON_EXE, get_p("industrial_zone_service.py")],
             [PYTHON_EXE, get_p("geo_data_service.py")],
             [PYTHON_EXE, get_p("crypto_stream_service.py")],
-            [PYTHON_EXE, get_p("backup_service.py")]
+            [PYTHON_EXE, get_p("backup_service.py")],
+            [PYTHON_EXE, get_p(os.path.join("telegram_bot", "main.py"))]
         ]
         for cmd in DEV_SERVICES:
             launch_cmd(cmd)
             time.sleep(1.0)
     else:
-        WAVES = [TIER0, TIER1, TIER2, TIER3, TIER4]
+        WAVES = [TIER0, TIER1, TIER2, TIER3, TIER4, TIER5]
         for i, wave in enumerate(WAVES):
             print(f"\n[SYSTEM] === STARTING_WAVE_{i}_{len(wave)}_SERVICES ===")
             for cmd in wave:
