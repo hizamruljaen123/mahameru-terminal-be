@@ -69,24 +69,29 @@ class DirectTelegramBot:
             return
 
         # --- SECURITY CHECK: RESTRICT TO ALLOWED CHAT ID ---
-        # If /get_id is sent, we always allow it so user can setup the .env
+        # Special case for /get_id (always allowed)
         if text.strip().startswith("/get_id"):
             BotHandlers.get_id(self.token, chat_id, message_id)
             return
 
         if self.allowed_chat_id:
             if str(chat_id) != str(self.allowed_chat_id):
-                # Ignore messages from other chats
-                # logger.info(f"Ignored message from unauthorized chat: {chat_id}")
                 return
 
         # --- TAG CHECK: MUST MENTION BOT IN GROUPS ---
         is_mentioned = False
+        bot_tag = f"@{self.bot_username}".lower() if self.bot_username else ""
+        
         if chat_type in ["group", "supergroup"]:
-            if self.bot_username and f"@{self.bot_username}" in text:
+            # Check if bot username is mentioned in text (case insensitive)
+            if bot_tag and bot_tag in text.lower():
                 is_mentioned = True
-                text = text.replace(f"@{self.bot_username}", "").strip()
+                # Remove tag from text for cleaner command parsing
+                # Use a case-insensitive replace
+                import re
+                text = re.compile(re.escape(bot_tag), re.IGNORECASE).sub("", text).strip()
         else:
+            # Private chat: always respond
             is_mentioned = True
 
         if not is_mentioned:
@@ -98,6 +103,10 @@ class DirectTelegramBot:
         
         command = parts[0].lower()
         args = parts[1:]
+
+        # Handle commands that might still have @bot attached (e.g. /update@bot)
+        if "@" in command:
+            command = command.split("@")[0]
 
         if command == "/start":
             BotHandlers.start(self.token, chat_id, message_id, message)
@@ -114,8 +123,11 @@ class DirectTelegramBot:
             updates = self.get_updates()
             for update in updates:
                 self.offset = update["update_id"] + 1
-                if "message" in update:
-                    self.handle_message(update["message"])
+                
+                # Check both new messages and edited messages
+                msg = update.get("message") or update.get("edited_message")
+                if msg:
+                    self.handle_message(msg)
             time.sleep(0.5)
 
 def main():
