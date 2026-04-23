@@ -84,6 +84,7 @@ TIER3 = [
     [PYTHON_EXE, get_p("oil_trade_service.py")],      # Port 8090
     [PYTHON_EXE, get_p("gnews_service.py")],          # Port 5006
     [PYTHON_EXE, get_p("vessel_intelligence_service.py")], # Port 8100 — Phase 4/5 Signal Engine
+    [PYTHON_EXE, get_p("price_intelligence_service.py")], # Port 8170
 ]
 
 # TIER 4: DASHBOARD AGGREGATOR (Final Layer)
@@ -91,10 +92,8 @@ TIER4 = [
     [PYTHON_EXE, get_p("dashboard_service.py")],     # Port 8000
 ]
 
-# TIER 5: EXTERNAL CONNECTORS (Telegram, Webhook, etc.)
-TIER5 = [
-    [PYTHON_EXE, get_p(os.path.join("telegram_bot", "telegram_bot_service.py")), "--port", "5010"],
-]
+# TIER 5: EXTERNAL CONNECTORS (None)
+TIER5 = []
 
 SERVICE_PORTS = {
     "news_service.py": [5101, 5102, 5103, 5104, 5105],
@@ -122,6 +121,7 @@ SERVICE_PORTS = {
     "oil_trade_service.py": [8090],
     "gnews_service.py": [5006],
     "vessel_intelligence_service.py": [8100],
+    "price_intelligence_service.py": [8170],
     "industrial_zone_service.py": [8094],
     "datacenter_service.py": [8110],
     "rail_station_service.py": [8111],
@@ -130,7 +130,8 @@ SERVICE_PORTS = {
     "military_service.py": [8160],
     "crypto_stream_service.py": [8092],
     "dashboard_service.py": [8000],
-    "telegram_bot_service.py": [5010]
+    # Removed Telegram
+
 }
 
 def clean_port(port):
@@ -232,7 +233,9 @@ def main():
             [PYTHON_EXE, get_p("geo_data_service.py")],
             [PYTHON_EXE, get_p("crypto_stream_service.py")],
             [PYTHON_EXE, get_p("backup_service.py")],
-            [PYTHON_EXE, get_p(os.path.join("telegram_bot", "telegram_bot_service.py")), "--port", "5010"]
+            [PYTHON_EXE, get_p("price_intelligence_service.py")],
+            # Removed Telegram Service
+
         ]
         for cmd in DEV_SERVICES:
             launch_cmd(cmd)

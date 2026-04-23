@@ -1,1 +1,0 @@
-# Asetpedia Telegram Intelligence Library
