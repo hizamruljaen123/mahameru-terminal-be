@@ -6,7 +6,7 @@ from .utils import format_ohlcv_table, format_news, format_fundamental
 
 class BotHandlers:
     @staticmethod
-    def _send_message(token, chat_id, text, parse_mode="Markdown", disable_preview=False):
+    def _send_message(token, chat_id, text, reply_to_id=None, parse_mode="Markdown", disable_preview=False):
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {
             "chat_id": chat_id,
@@ -14,40 +14,45 @@ class BotHandlers:
             "parse_mode": parse_mode,
             "disable_web_page_preview": disable_preview
         }
+        if reply_to_id:
+            payload["reply_to_message_id"] = reply_to_id
+            
         try:
             requests.post(url, json=payload, timeout=10)
         except Exception as e:
             print(f"Error sending message: {e}")
 
     @staticmethod
-    def _send_photo(token, chat_id, photo_path, caption=""):
+    def _send_photo(token, chat_id, photo_path, reply_to_id=None, caption=""):
         url = f"https://api.telegram.org/bot{token}/sendPhoto"
         try:
             with open(photo_path, 'rb') as photo:
                 files = {'photo': photo}
                 data = {'chat_id': chat_id, 'caption': caption}
+                if reply_to_id:
+                    data["reply_to_message_id"] = reply_to_id
                 requests.post(url, data=data, files=files, timeout=20)
         except Exception as e:
             print(f"Error sending photo: {e}")
 
     @staticmethod
-    def start(token, chat_id, message):
+    def start(token, chat_id, message_id, message):
         user_name = message["from"].get("first_name", "User")
-        BotHandlers._send_message(token, chat_id, f"Halo *{user_name}*! Welcome to Asetpedia Intelligence Bot.")
+        BotHandlers._send_message(token, chat_id, f"Halo *{user_name}*! Welcome to Asetpedia Intelligence Bot.", reply_to_id=message_id)
 
     @staticmethod
-    def update_entity(token, chat_id, args):
+    def update_entity(token, chat_id, message_id, args):
         if not args:
-            BotHandlers._send_message(token, chat_id, "Please provide a symbol. Example: /update AAPL")
+            BotHandlers._send_message(token, chat_id, "Please provide a symbol. Example: /update AAPL", reply_to_id=message_id)
             return
 
         symbol = args[0].upper()
-        BotHandlers._send_message(token, chat_id, f"🔍 Fetching institutional intelligence for {symbol}...")
+        BotHandlers._send_message(token, chat_id, f"🔍 Fetching institutional intelligence for {symbol}...", reply_to_id=message_id)
 
         # 1. Fetch History
         history_res = AsetpediaAPI.get_market_history(symbol)
         if history_res.get("status") != "success":
-            BotHandlers._send_message(token, chat_id, f"❌ Error: {history_res.get('message')}")
+            BotHandlers._send_message(token, chat_id, f"❌ Error: {history_res.get('message')}", reply_to_id=message_id)
             return
 
         history = history_res.get("history", [])
@@ -55,12 +60,12 @@ class BotHandlers:
         # 2. Generate & Send Chart
         chart_path = MarketVisualizer.generate_ohlc_chart(symbol, history)
         if chart_path:
-            BotHandlers._send_photo(token, chat_id, chart_path, caption=f"📊 Intraday Chart: {symbol}")
+            BotHandlers._send_photo(token, chat_id, chart_path, caption=f"📊 Intraday Chart: {symbol}", reply_to_id=message_id)
             MarketVisualizer.cleanup(chart_path)
 
         # 3. Table
         table_text = format_ohlcv_table(history, limit=20)
-        BotHandlers._send_message(token, chat_id, f"📋 *Last 20 OHLCV Data:*\n{table_text}")
+        BotHandlers._send_message(token, chat_id, f"📋 *Last 20 OHLCV Data:*\n{table_text}", reply_to_id=message_id)
 
         # 4. News
         is_crypto = "-USD" in symbol or len(symbol) <= 5
@@ -71,27 +76,27 @@ class BotHandlers:
                 news = crypto_res.get("data", {}).get("news", [])
         
         news_text = format_news(news, limit=5)
-        BotHandlers._send_message(token, chat_id, f"📰 *Latest Intelligence Headlines:*\n\n{news_text}", disable_preview=True)
+        BotHandlers._send_message(token, chat_id, f"📰 *Latest Intelligence Headlines:*\n\n{news_text}", reply_to_id=message_id, disable_preview=True)
 
     @staticmethod
-    def analyze(token, chat_id, args):
+    def analyze(token, chat_id, message_id, args):
         if not args:
-            BotHandlers._send_message(token, chat_id, "Please provide a symbol. Example: /analyze BTC")
+            BotHandlers._send_message(token, chat_id, "Please provide a symbol. Example: /analyze BTC", reply_to_id=message_id)
             return
             
         symbol = args[0].upper()
-        BotHandlers._send_message(token, chat_id, f"🤖 Running AI Multi-Agent analysis for {symbol}...")
+        BotHandlers._send_message(token, chat_id, f"🤖 Running AI Multi-Agent analysis for {symbol}...", reply_to_id=message_id)
         
         res = AsetpediaAPI.get_ai_analyze(symbol)
         if res.get("status") == "success":
             verdict = res.get("data", "No analysis available.")
-            BotHandlers._send_message(token, chat_id, f"🔮 *AI Technical Verdict for {symbol}:*\n\n{verdict}")
+            BotHandlers._send_message(token, chat_id, f"🔮 *AI Technical Verdict for {symbol}:*\n\n{verdict}", reply_to_id=message_id)
         else:
-            BotHandlers._send_message(token, chat_id, f"❌ AI Analysis failed.")
+            BotHandlers._send_message(token, chat_id, f"❌ AI Analysis failed.", reply_to_id=message_id)
 
     @staticmethod
-    def market_pulse(token, chat_id):
-        BotHandlers._send_message(token, chat_id, "🌐 Fetching global market pulse...")
+    def market_pulse(token, chat_id, message_id):
+        BotHandlers._send_message(token, chat_id, "🌐 Fetching global market pulse...", reply_to_id=message_id)
         res = AsetpediaAPI.get_market_watchlist()
         if res.get("status") == "success":
             data = res.get("data", {})
@@ -104,4 +109,10 @@ class BotHandlers:
                     sign = "+" if change > 0 else ""
                     summary.append(f"• {item['name']}: {item['price']} ({sign}{change:.2f}%)")
             
-            BotHandlers._send_message(token, chat_id, "\n".join(summary))
+            BotHandlers._send_message(token, chat_id, "\n".join(summary), reply_to_id=message_id)
+
+    @staticmethod
+    def get_id(token, chat_id, message_id):
+        """Returns the current chat/group ID."""
+        msg = f"🆔 *Chat Intelligence Info*\n\nThis Chat ID: `{chat_id}`"
+        BotHandlers._send_message(token, chat_id, msg, reply_to_id=message_id)

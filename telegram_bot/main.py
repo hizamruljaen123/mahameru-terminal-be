@@ -19,6 +19,20 @@ class DirectTelegramBot:
         self.token = token
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         self.offset = 0
+        self.bot_username = self._get_me()
+
+    def _get_me(self):
+        """Get bot info to know its username for mentions."""
+        try:
+            resp = requests.get(f"{self.base_url}/getMe", timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                username = data.get("result", {}).get("username")
+                print(f"BOT_INFO: @{username} is active.")
+                return username
+        except Exception as e:
+            logger.error(f"Error getting bot info: {e}")
+        return None
 
     def get_updates(self):
         url = f"{self.base_url}/getUpdates"
@@ -35,26 +49,46 @@ class DirectTelegramBot:
     def handle_message(self, message):
         text = message.get("text", "")
         chat_id = message["chat"]["id"]
+        chat_type = message["chat"]["type"]
+        message_id = message["message_id"]
         
         if not text:
             return
 
+        # Check if bot is mentioned in groups
+        is_mentioned = False
+        if chat_type in ["group", "supergroup"]:
+            if self.bot_username and f"@{self.bot_username}" in text:
+                is_mentioned = True
+                # Clean up the text to remove the tag for processing
+                text = text.replace(f"@{self.bot_username}", "").strip()
+        else:
+            # Private chat: always respond
+            is_mentioned = True
+
+        if not is_mentioned:
+            return
+
         # Simple command dispatcher
         parts = text.split()
+        if not parts: return
+        
         command = parts[0].lower()
         args = parts[1:]
 
         if command == "/start":
-            BotHandlers.start(self.token, chat_id, message)
+            BotHandlers.start(self.token, chat_id, message_id, message)
         elif command == "/update":
-            BotHandlers.update_entity(self.token, chat_id, args)
+            BotHandlers.update_entity(self.token, chat_id, message_id, args)
         elif command == "/analyze":
-            BotHandlers.analyze(self.token, chat_id, args)
+            BotHandlers.analyze(self.token, chat_id, message_id, args)
         elif command == "/market_pulse":
-            BotHandlers.market_pulse(self.token, chat_id)
+            BotHandlers.market_pulse(self.token, chat_id, message_id)
+        elif command == "/get_id":
+            BotHandlers.get_id(self.token, chat_id, message_id)
 
     def run(self):
-        print("=:: ASETPEDIA INTELLIGENCE BOT (DIRECT API) IS ONLINE ::= ")
+        print("=:: ASETPEDIA INTELLIGENCE BOT (DIRECT API + TAG ONLY) IS ONLINE ::= ")
         while True:
             updates = self.get_updates()
             for update in updates:
