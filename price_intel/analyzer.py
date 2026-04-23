@@ -8,14 +8,23 @@ logger = logging.getLogger("PriceIntel.Analyzer")
 
 class PriceAnalyzer:
     @staticmethod
-    def perform_analysis(symbol: str, period: str = "6mo") -> Optional[pd.DataFrame]:
-        """Quantitative analysis using TA-Lib"""
+    def perform_analysis(symbol: str, period: str = "6mo") -> Optional[dict]:
+        """Quantitative analysis using TA-Lib and metadata fetching"""
         try:
-            df = yf.download(symbol, period=period, interval="1d", progress=False)
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period=period, interval="1d")
+            
             if df.empty:
                 logger.warning(f"No data found for {symbol}")
                 return None
             
+            # Fetch company info
+            info = ticker.info
+            company_info = {
+                "name": info.get("longName") or info.get("shortName") or symbol,
+                "country": info.get("country", "Unknown")
+            }
+
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
 
@@ -34,7 +43,10 @@ class PriceAnalyzer:
             df['CDL_ENGULFING'] = ta.CDLENGULFING(open_p, high, low, close)
             df['CDL_DOJI'] = ta.CDLDOJI(open_p, high, low, close)
             
-            return df
+            return {
+                "df": df,
+                "info": company_info
+            }
         except Exception as e:
             logger.error(f"Analysis error for {symbol}: {e}")
             return None

@@ -12,11 +12,24 @@ logger = logging.getLogger("PriceIntel.Formatter")
 
 class PriceFormatter:
     @staticmethod
-    def get_news(symbol: str, count: int = 4) -> List[Dict]:
-        """Fetch latest news for a symbol using Google News RSS"""
+    def get_news(symbol: str, company_name: str, country: str, count: int = 4) -> List[Dict]:
+        """Fetch latest news using company name and localization"""
         try:
-            query = quote(f"{symbol} stock market analysis")
-            rss_url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+            is_indonesia = country.lower() == "indonesia"
+            
+            # Build better query using name instead of just symbol
+            search_query = f"{company_name} market analysis"
+            if is_indonesia:
+                search_query = f"berita saham {company_name}"
+            
+            query = quote(search_query)
+            
+            # Localize if Indonesia
+            if is_indonesia:
+                rss_url = f"https://news.google.com/rss/search?q={query}&hl=id-ID&gl=ID&ceid=ID:id"
+            else:
+                rss_url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+            
             feed = feedparser.parse(rss_url)
             
             links = []
@@ -55,7 +68,7 @@ class PriceFormatter:
         return buf
 
     @staticmethod
-    def format_caption(df: pd.DataFrame, symbol: str, news: List[Dict]) -> str:
+    def format_caption(df: pd.DataFrame, symbol: str, company_name: str, country: str, news: List[Dict]) -> str:
         """Format the Telegram caption"""
         last = df.iloc[-1]
         prev = df.iloc[-2]
@@ -75,8 +88,9 @@ class PriceFormatter:
 
         news_html = "\n\n".join([f"🔗 <a href='{n['link']}'>{n['title']}</a>" for n in news]) if news else "No recent news found."
 
-        caption = f"<b>🏛️ {symbol} QUANT DASHBOARD</b>\n"
-        caption += f"<code>Update: {datetime.now().strftime('%H:%M')}</code>\n"
+        flag = "🇮🇩" if country.lower() == "indonesia" else "🌍"
+        caption = f"<b>🏛️ {company_name} ({symbol}) {flag}</b>\n"
+        caption += f"<code>Update: {datetime.now().strftime('%H:%M')} | {country}</code>\n"
         caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         caption += f"<b>Price:</b> {price_now:.2f} ({pct_change:+.2f}%)\n"
         caption += f"<b>ADX:</b> {last['ADX']:.1f} ({'Strong Trend' if last['ADX'] > 25 else 'Weak Trend'})\n"
@@ -86,6 +100,45 @@ class PriceFormatter:
         caption += f"<b>📰 RECENT NEWS:</b>\n{news_html}\n"
         caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         caption += f"<b>HISTORICAL DATA:</b>\n<pre>{table_str}</pre>\n"
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         caption += "<i>Powered by Mahameru Intelligence</i>"
+        return caption
+
+    @staticmethod
+    def format_sentiment_report(symbol: str, company_name: str, country: str, sentiment_dist: Dict[str, int], news: List[Dict]) -> str:
+        """Format the Telegram sentiment report"""
+        total = sum(sentiment_dist.values())
+        if total == 0: total = 1
+        
+        pos_pct = (sentiment_dist['POSITIVE'] / total) * 100
+        neg_pct = (sentiment_dist['NEGATIVE'] / total) * 100
+        neu_pct = (sentiment_dist['NEUTRAL'] / total) * 100
+        
+        flag = "🇮🇩" if country.lower() == "indonesia" else "🌍"
+        
+        # Build sentiment bar
+        bar_len = 15
+        pos_chars = int((pos_pct / 100) * bar_len)
+        neg_chars = int((neg_pct / 100) * bar_len)
+        neu_chars = bar_len - pos_chars - neg_chars
+        bar = "🟢" * pos_chars + "⚪" * neu_chars + "🔴" * neg_chars
+
+        caption = f"<b>📊 {company_name} ({symbol}) SENTIMENT ANALYSIS {flag}</b>\n"
+        caption += f"<code>Update: {datetime.now().strftime('%H:%M')} | {country}</code>\n"
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        caption += f"<b>Score: {bar}</b>\n"
+        caption += f"🟢 Positive: {pos_pct:.1f}%\n"
+        caption += f"⚪ Neutral: {neu_pct:.1f}%\n"
+        caption += f"🔴 Negative: {neg_pct:.1f}%\n"
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        caption += "<b>📰 ANALYZED NEWS:</b>\n"
+        
+        for n in news:
+            s = n.get('sentiment', 'NEUTRAL')
+            icon = "🟢" if s == "POSITIVE" else ("🔴" if s == "NEGATIVE" else "⚪")
+            caption += f"{icon} <a href='{n['link']}'>{n['title']}</a>\n"
+            
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        caption += "<i>Source: Google News & AI Sentiment Engine</i>"
         
         return caption

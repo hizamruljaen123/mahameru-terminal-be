@@ -40,11 +40,16 @@ bot = PriceIntelligenceBot(TOKEN, CHAT_ID)
 
 @app.get("/api/price/analyze/{symbol}")
 async def get_analysis(symbol: str):
-    df = PriceAnalyzer.perform_analysis(symbol)
-    if df is None:
+    result = PriceAnalyzer.perform_analysis(symbol)
+    if result is None:
         raise HTTPException(status_code=404, detail="Symbol not found or no data")
     
-    news = PriceFormatter.get_news(symbol)
+    df = result["df"]
+    info = result["info"]
+    company_name = info["name"]
+    country = info["country"]
+
+    news = PriceFormatter.get_news(symbol, company_name, country)
     last = df.iloc[-1]
     prev = df.iloc[-2]
     
@@ -58,6 +63,8 @@ async def get_analysis(symbol: str):
 
     return {
         "symbol": symbol,
+        "company_name": company_name,
+        "country": country,
         "price": price_now,
         "change_pct": pct_change,
         "adx": float(last['ADX']),
@@ -69,10 +76,11 @@ async def get_analysis(symbol: str):
 
 @app.get("/api/price/chart/{symbol}")
 async def get_chart(symbol: str):
-    df = PriceAnalyzer.perform_analysis(symbol)
-    if df is None:
+    result = PriceAnalyzer.perform_analysis(symbol)
+    if result is None:
         raise HTTPException(status_code=404, detail="Symbol not found or no data")
     
+    df = result["df"]
     chart_buf = PriceFormatter.create_chart(df, symbol)
     return StreamingResponse(chart_buf, media_type="image/png")
 
