@@ -177,8 +177,7 @@ class PriceFormatter:
             volume=True,
             returnfig=True,
             figsize=(12, 8),
-            tight_layout=True,
-            facecolor='#121212'
+            tight_layout=True
         )
         
         ax_main = axes[0]
