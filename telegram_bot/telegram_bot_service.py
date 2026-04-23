@@ -69,8 +69,24 @@ class DirectTelegramBot:
             chat_id = message["chat"]["id"]
             chat_type = message["chat"]["type"]
             message_id = message["message_id"]
+            # 0. DETECT GROUP JOIN (WELCOME MESSAGE)
+            if "new_chat_members" in message:
+                for member in message["new_chat_members"]:
+                    if member.get("username") == self.bot_username:
+                        logger.info(f"✨ Bot joined new group: {chat_id}")
+                        welcome_text = (
+                            "👋 *Greetings, Mahameru Terminal Intelligence is Online!*\n\n"
+                            "Saya telah berhasil terintegrasi dengan grup ini. Saya siap menyajikan data pasar, "
+                            "analisis AI, dan intelijen pasar terbaru.\n\n"
+                            "📌 *Cara Menggunakan:* Tag saya dan masukkan perintah.\n"
+                            "Contoh: `@mahameruTerminal_bot /update TSLA`\n\n"
+                            "Ketik `/start` untuk melihat daftar lengkap perintah."
+                        )
+                        BotHandlers._send_message(self.token, chat_id, welcome_text)
+                        return
+
+            # Jika bukan pesan teks (dan bukan join member), abaikan
             text = message.get("text", "")
-            
             if not text: return
 
             # 1. SPECIAL COMMAND: /get_id (Always Allowed)
