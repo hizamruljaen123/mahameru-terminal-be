@@ -20,6 +20,13 @@ class DirectTelegramBot:
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         self.offset = 0
         self.bot_username = self._get_me()
+        self.allowed_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        
+        if self.allowed_chat_id and "YOUR_CHAT_ID_HERE" not in self.allowed_chat_id:
+            print(f"SECURITY: Bot restricted to Chat ID: {self.allowed_chat_id}")
+        else:
+            print("SECURITY WARNING: No TELEGRAM_CHAT_ID set. Bot will respond to everyone to allow /get_id.")
+            self.allowed_chat_id = None
 
     def _get_me(self):
         """Get bot info to know its username for mentions."""
@@ -47,29 +54,39 @@ class DirectTelegramBot:
         return []
 
     def handle_message(self, message):
-        text = message.get("text", "")
         chat_id = message["chat"]["id"]
         chat_type = message["chat"]["type"]
         message_id = message["message_id"]
+        text = message.get("text", "")
         
         if not text:
             return
 
-        # Check if bot is mentioned in groups
+        # --- SECURITY CHECK: RESTRICT TO ALLOWED CHAT ID ---
+        # If /get_id is sent, we always allow it so user can setup the .env
+        if text.strip().startswith("/get_id"):
+            BotHandlers.get_id(self.token, chat_id, message_id)
+            return
+
+        if self.allowed_chat_id:
+            if str(chat_id) != str(self.allowed_chat_id):
+                # Ignore messages from other chats
+                # logger.info(f"Ignored message from unauthorized chat: {chat_id}")
+                return
+
+        # --- TAG CHECK: MUST MENTION BOT IN GROUPS ---
         is_mentioned = False
         if chat_type in ["group", "supergroup"]:
             if self.bot_username and f"@{self.bot_username}" in text:
                 is_mentioned = True
-                # Clean up the text to remove the tag for processing
                 text = text.replace(f"@{self.bot_username}", "").strip()
         else:
-            # Private chat: always respond
             is_mentioned = True
 
         if not is_mentioned:
             return
 
-        # Simple command dispatcher
+        # Command dispatcher
         parts = text.split()
         if not parts: return
         
@@ -84,11 +101,9 @@ class DirectTelegramBot:
             BotHandlers.analyze(self.token, chat_id, message_id, args)
         elif command == "/market_pulse":
             BotHandlers.market_pulse(self.token, chat_id, message_id)
-        elif command == "/get_id":
-            BotHandlers.get_id(self.token, chat_id, message_id)
 
     def run(self):
-        print("=:: ASETPEDIA INTELLIGENCE BOT (DIRECT API + TAG ONLY) IS ONLINE ::= ")
+        print("=:: ASETPEDIA INTELLIGENCE BOT (RESTRICTED MODE) IS ONLINE ::= ")
         while True:
             updates = self.get_updates()
             for update in updates:
