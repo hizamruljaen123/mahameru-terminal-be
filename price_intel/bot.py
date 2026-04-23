@@ -151,8 +151,12 @@ class PriceIntelligenceBot:
             data["ohlcv"], data["analysis"], data["method_id"], symbol
         )
         
+        table_html = PriceFormatter.format_deep_ta_table(data["analysis"], data["method_id"])
+        
         caption = f"<b>🔬 DEEP TA: {data['method_name']}</b>\n"
         caption += f"<code>Symbol: {symbol} | Method ID: {data['method_id']}</code>\n"
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        caption += f"{table_html}\n"
         caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         caption += "<i>Advanced institutional analysis processed from the last 100 data points.</i>"
 
