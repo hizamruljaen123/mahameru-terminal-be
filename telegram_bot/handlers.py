@@ -68,7 +68,8 @@ class BotHandlers:
         BotHandlers._delete_message(token, chat_id, status_id)
         
         if history_res.get("status") != "success":
-            BotHandlers._send_message(token, chat_id, f"❌ Error: {history_res.get('message')}", reply_to_id=message_id)
+            err_msg = history_res.get('message') or str(history_res)
+            BotHandlers._send_message(token, chat_id, f"❌ Error fetching market data for *{symbol}*:\n`{err_msg}`", reply_to_id=message_id)
             return
 
         history = history_res.get("history", [])
@@ -85,7 +86,8 @@ class BotHandlers:
         # --- PHASE 3: FETCHING NEWS ---
         status_id = BotHandlers._send_message(token, chat_id, "📰 `Mengumpulkan berita...`", reply_to_id=message_id)
         
-        is_crypto = "-USD" in symbol or len(symbol) <= 5
+        # is_crypto: only true when symbol explicitly ends with -USD (e.g. BTC-USD)
+        is_crypto = "-USD" in symbol
         news = []
         if is_crypto:
             crypto_res = AsetpediaAPI.get_crypto_detail(symbol.replace("-USD", ""))
