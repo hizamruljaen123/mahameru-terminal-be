@@ -71,6 +71,8 @@ class PriceIntelligenceBot:
                 # Let's assume symbol for deep_ta is "METHOD:SYMBOL"
                 method, actual_symbol = symbol.split(":")
                 self.send_deep_ta_report(actual_symbol, method, target_chat_id)
+            elif task_type == "news":
+                self.send_keyword_news(symbol, target_chat_id)
         finally:
             # Always try to delete the loading message
             if loading_id:
@@ -137,7 +139,38 @@ class PriceIntelligenceBot:
             if resp.status_code != 200:
                 logger.error(f"❌ Telegram send failed: {resp.text}")
         except Exception as e:
-            logger.error(f"❌ Error sending to Telegram: {e}")
+            logger.error(f"❌ Error sending sentiment report: {e}")
+
+    def send_keyword_news(self, keyword: str, target_chat_id: str):
+        logger.info(f"Generating keyword news for '{keyword}' to chat {target_chat_id}...")
+        
+        # Fetch 5 ID and 5 EN
+        news_id = PriceFormatter.get_news(keyword, keyword, "indonesia", count=5)
+        news_en = PriceFormatter.get_news(keyword, keyword, "global", count=5)
+        all_news = news_id + news_en
+        
+        if not all_news:
+            self.send_message(target_chat_id, f"❌ No news found for <b>{keyword}</b>.")
+            return
+            
+        # Analyze
+        analyzed_news = SentimentAnalyzer.analyze_batch(all_news)
+        
+        caption = f"<b>📰 NEWS FEED: {keyword.upper()}</b>\n"
+        caption += f"<i>Analyzing 10 latest articles (Global & ID)</i>\n"
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        
+        for n in analyzed_news:
+            s = n.get('sentiment', 'NEUTRAL')
+            icon = "🟢" if s == "POSITIVE" else ("🔴" if s == "NEGATIVE" else "⚪")
+            # Truncate title for brevity
+            title = n['title'][:60] + "..." if len(n['title']) > 63 else n['title']
+            caption += f"{icon} <a href='{n['link']}'>{title}</a>\n"
+            
+        caption += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        caption += "<i>Source: AI Sentiment Engine</i>"
+        
+        self.send_message(target_chat_id, caption)
 
     def send_deep_ta_report(self, symbol: str, method: str, target_chat_id: str):
         logger.info(f"Generating Deep TA ({method}) for {symbol} to chat {target_chat_id}...")
@@ -219,22 +252,29 @@ class PriceIntelligenceBot:
                 "<code>/mt_sentinews [SYMBOL]</code>\n"
                 "Deskripsi: Analisis sentimen berita terbaru menggunakan AI (BERT & FinBERT).\n"
                 "Contoh: <code>/mt_sentinews BBCA.JK</code>\n\n"
+
+                "<b>3. Pencarian Berita & Sentimen</b>\n"
+                "<code>/mt_news [KATA KUNCI]</code>\n"
+                "Deskripsi: Cari 10 berita terbaru (ID & EN) dengan analisis sentimen AI.\n"
+                "Contoh: <code>/mt_news IHSG</code> atau <code>/mt_news Bitcoin</code>\n\n"
                 
-                "<b>3. Analisis Teknikal Mendalam (Deep TA)</b>\n"
+                "<b>4. Analisis Teknikal Mendalam (Deep TA)</b>\n"
                 "<code>/mt_tda [METODE] [SYMBOL]</code>\n"
                 "Deskripsi: Analisis tingkat institusi dengan visualisasi canggih.\n"
-                "Metode:\n"
-                "- <code>master</code>: Skor AI Komposit\n"
-                "- <code>regime</code>: Deteksi Fase Market\n"
-                "- <code>vdelta</code>: Tekanan Beli/Jual\n"
-                "- <code>spectral</code>: Analisis Siklus Harga\n"
-                "- <code>smc</code>: Smart Money Concepts (BOS)\n"
+                "Metode: <code>master, regime, vdelta, spectral, smc</code>\n"
                 "Contoh: <code>/mt_tda smc BTC-USD</code>\n\n"
                 
                 "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
                 "<i>Gunakan simbol yfinance (misal: .JK untuk IHSG, -USD untuk Crypto).</i>"
             )
             self.send_message(chat_id, help_text)
+        
+        elif cmd == "/mt_news":
+            if len(cmd_parts) > 1:
+                keyword = " ".join(cmd_parts[1:])
+                self.task_queue.put(("news", keyword, chat_id))
+            else:
+                self.send_message(chat_id, "ℹ️ Usage: <code>/mt_news [KATA KUNCI]</code>")
 
     def worker(self):
         """Background worker to process the task queue sequentially"""
