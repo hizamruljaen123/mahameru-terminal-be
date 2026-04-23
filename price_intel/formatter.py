@@ -2,11 +2,13 @@ import io
 import feedparser
 import mplfinance as mpf
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime
 from urllib.parse import quote
 from tabulate import tabulate
 import logging
-from typing import List, Dict
+from typing import List, Dict, Any
 
 logger = logging.getLogger("PriceIntel.Formatter")
 
