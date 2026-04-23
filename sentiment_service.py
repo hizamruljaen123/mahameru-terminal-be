@@ -14,12 +14,10 @@ try:
     from langdetect import detect, DetectorFactory
     DetectorFactory.seed = 0
     from transformers import pipeline
-    from sklearn.decomposition import PCA
-    from sklearn.manifold import TSNE
     MODELS_AVAILABLE = True
 except ImportError:
     MODELS_AVAILABLE = False
-    print("Warning: langdetect, transformers, or sklearn missing. Sentiment service will work in degraded mode.")
+    print("Warning: langdetect or transformers missing. Sentiment service will work in degraded mode.")
 
 import warnings
 
@@ -46,8 +44,6 @@ class SentimentAnalyzer:
     def __init__(self):
         self.id_pipeline = None
         self.en_pipeline = None
-        self.id_feature_extractor = None
-        self.en_feature_extractor = None
         
         if MODELS_AVAILABLE:
             print(f"[SENTIMENT_SERVICE] Loading Transformers models (BERT Indonesian & DistilBERT)...")
@@ -57,8 +53,6 @@ class SentimentAnalyzer:
         try:
             self.id_pipeline = pipeline("sentiment-analysis", model=ID_MODEL_ID)
             self.en_pipeline = pipeline("sentiment-analysis", model=EN_MODEL_ID)
-            self.id_feature_extractor = pipeline("feature-extraction", model=ID_MODEL_ID)
-            self.en_feature_extractor = pipeline("feature-extraction", model=EN_MODEL_ID)
             print("[SENTIMENT_SERVICE] Models loaded successfully.")
         except Exception as e:
             print(f"[SENTIMENT_SERVICE] Error loading models: {e}")
@@ -68,7 +62,7 @@ class SentimentAnalyzer:
         try: return detect(text)
         except: return "en"
 
-    def analyze_batch(self, articles: List[Dict], include_embeddings: bool = False, force: bool = False, save_db: bool = True):
+    def analyze_batch(self, articles: List[Dict], force: bool = False, save_db: bool = True):
         if not MODELS_AVAILABLE: return articles
         
         processed_articles = []
@@ -91,16 +85,10 @@ class SentimentAnalyzer:
                 res = pipe(text)[0]
                 label = res['label'].upper()
                 
+                sentiment = "NEUTRAL"
                 if 'LABEL_0' in label or 'NEGATIVE' in label: sentiment = "NEGATIVE"
                 elif 'LABEL_1' in label or 'NEUTRAL' in label: sentiment = "NEUTRAL"
                 elif 'LABEL_2' in label or 'POSITIVE' in label: sentiment = "POSITIVE"
-                else: sentiment = "NEUTRAL"
-                
-                emb = None
-                if include_embeddings and self.id_feature_extractor:
-                    ext = self.id_feature_extractor if lang == 'id' else self.en_feature_extractor
-                    feat = ext(text)
-                    emb = np.mean(feat[0], axis=0).tolist()
                 
                 art['sentiment'] = sentiment
                 art['sentiment_lang'] = lang
@@ -137,72 +125,18 @@ class SentimentAnalyzer:
     def save_to_db(self, article_id, sentiment, lang):
         self.save_bulk_to_db([(sentiment, lang, article_id)])
 
-    def compute_projections(self, articles: List[Dict], n_components=2, method='pca'):
-        if not articles or not self.id_feature_extractor:
-            return []
-        
-        embeddings = []
-        valid_indices = []
-        
-        for i, art in enumerate(articles):
-            text = (art['title'] + " " + (art['description'] or ""))[:512]
-            lang = art.get('sentiment_lang') or self.lang_detect(text)
-            try:
-                ext = self.id_feature_extractor if lang == 'id' else self.en_feature_extractor
-                feat = ext(text)
-                emb = np.mean(feat[0], axis=0)
-                embeddings.append(emb)
-                valid_indices.append(i)
-            except Exception as e:
-                print(f"[PROJECTION] Error extracting features: {e}")
-                continue
-                
-        if len(embeddings) < 2:
-            return []
-            
-        X = np.array(embeddings)
-        
-        try:
-            if method == 'pca':
-                model = PCA(n_components=n_components)
-                projections = model.fit_transform(X)
-            elif method == 'tsne':
-                perp = min(30, len(X) - 1)
-                model = TSNE(n_components=n_components, perplexity=perp, init='pca', learning_rate='auto')
-                projections = model.fit_transform(X)
-            else:
-                return []
-                
-            result = []
-            for i, idx in enumerate(valid_indices):
-                art = articles[idx]
-                proj_data = {
-                    "id": art.get('id'),
-                    "title": art.get('title'),
-                    "sentiment": art.get('sentiment'),
-                    "category": art.get('category'),
-                    "x": float(projections[i, 0]),
-                    "y": float(projections[i, 1])
-                }
-                if n_components == 3:
-                    proj_data["z"] = float(projections[i, 2])
-                result.append(proj_data)
-            return result
-        except Exception as e:
-            print(f"[PROJECTION] Error during {method}: {e}")
-            return []
 
 analyzer = SentimentAnalyzer()
 
 # --- PARALLEL WORKER SYSTEM ---
 def process_chunk_worker(articles_chunk):
     # Global 'analyzer' is already initialized during module import in child processes on Windows
-    return analyzer.analyze_batch(articles_chunk, include_embeddings=False, force=True, save_db=True)
+    return analyzer.analyze_batch(articles_chunk, force=True, save_db=True)
 
 import threading
 
 CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sentiment_snapshots.json")
-PROJECTIONS_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sentiment_projections_cache.json")
+CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sentiment_snapshots.json")
 
 def background_analyzer():
     if not MODELS_AVAILABLE: return
@@ -217,7 +151,7 @@ def background_analyzer():
             df = pd.read_sql(query, conn, params=(today_start, today_start))
             
             if not df.empty:
-                analyzer.analyze_batch(df.to_dict('records'), include_embeddings=False)
+                analyzer.analyze_batch(df.to_dict('records'))
             
             summary_query = """
             SELECT f.category, a.sentiment, COUNT(a.id) as count
@@ -249,22 +183,7 @@ def background_analyzer():
 
 @app.get("/api/sentiment/init")
 def get_categories_init():
-    if os.path.exists(PROJECTIONS_CACHE_FILE):
-        try:
-            with open(PROJECTIONS_CACHE_FILE, 'r', encoding='utf-8') as f:
-                cache = json.load(f)
-                projections = cache.get("data", {}).get("projections", [])
-                
-                if projections:
-                    counts = {}
-                    for p in projections:
-                        cat = p.get("category", "General")
-                        counts[cat] = counts.get(cat, 0) + 1
-                    
-                    category_list = [{"category": cat, "count": count} for cat, count in sorted(counts.items(), key=lambda x: x[1], reverse=True)]
-                    return {"status": "success", "data": category_list, "source": "json_cache"}
-        except: pass
-
+    """Provides initial category metadata and counts for the dashboard"""
     conn = get_db_connection()
     try:
         query = """
@@ -409,43 +328,6 @@ def research_sentiment(keyword: str):
                     "sentiment_dist": {k: int(v) for k,v in dist.items()},
                     "articles": articles,
                     "timestamp": datetime.utcnow().isoformat()
-                }
-            }
-        finally:
-            conn.close()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/sentiment/research/projections")
-def get_research_projections(keyword: str):
-    try:
-        time_gate = (datetime.utcnow() - timedelta(hours=24*30)).strftime('%Y-%m-%d %H:%M:%S')
-        conn = get_db_connection()
-        try:
-            query = """
-            SELECT a.id, a.title, a.description, a.sentiment, COALESCE(f.category, 'General') as category
-            FROM article a
-            LEFT JOIN feedsource f ON a.sourceId = f.id
-            WHERE (a.title LIKE %s OR a.description LIKE %s)
-            AND (a.pubDate >= %s OR a.createdAt >= %s)
-            ORDER BY a.pubDate DESC
-            LIMIT 100
-            """
-            params = (f"%{keyword}%", f"%{keyword}%", time_gate, time_gate)
-            df = pd.read_sql(query, conn, params=params)
-            
-            if df.empty:
-                return {"status": "success", "data": {"pca": [], "tsne": []}}
-            
-            articles = df.to_dict('records')
-            pca_proj = analyzer.compute_projections(articles, n_components=2, method='pca')
-            tsne_proj = analyzer.compute_projections(articles, n_components=2, method='tsne')
-
-            return {
-                "status": "success",
-                "data": {
-                    "pca": pca_proj,
-                    "tsne": tsne_proj
                 }
             }
         finally:
