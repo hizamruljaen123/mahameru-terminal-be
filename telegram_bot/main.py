@@ -2,7 +2,12 @@ import os
 import time
 import requests
 import logging
+import sys
 from dotenv import load_dotenv
+
+# Add project root to sys.path to allow 'telegram_bot' package imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from telegram_bot.handlers import BotHandlers
 
 # Load environment variables
