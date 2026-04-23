@@ -1,8 +1,10 @@
 import os
+from typing import Optional
 import time
 import threading
 import requests
 import logging
+import queue
 from .analyzer import PriceAnalyzer
 from .formatter import PriceFormatter
 from .sentiment import SentimentAnalyzer
@@ -17,6 +19,10 @@ class PriceIntelligenceBot:
         self.offset = 0
         self.running = False
         self.sentiment_analyzer = SentimentAnalyzer()
+        
+        # Request Queueing System
+        self.task_queue = queue.Queue()
+        self.worker_thread = None
 
     def get_updates(self):
         try:
@@ -27,6 +33,42 @@ class PriceIntelligenceBot:
         except Exception as e:
             logger.error(f"Error getting updates: {e}")
         return []
+
+    def send_loading_message(self, target_chat_id: str, symbol: str) -> Optional[int]:
+        """Send a temporary loading message and return its ID"""
+        url = f"{self.api_url}/sendMessage"
+        payload = {
+            'chat_id': target_chat_id,
+            'text': f"⏳ <b>Processing {symbol}...</b>\n<i>Analyzing market data and AI sentiment...</i>",
+            'parse_mode': 'HTML'
+        }
+        try:
+            resp = requests.post(url, data=payload)
+            if resp.status_code == 200:
+                return resp.json().get("result", {}).get("message_id")
+        except: pass
+        return None
+
+    def delete_message(self, target_chat_id: str, message_id: int):
+        """Delete a message by ID"""
+        if not message_id: return
+        url = f"{self.api_url}/deleteMessage"
+        payload = {'chat_id': target_chat_id, 'message_id': message_id}
+        requests.post(url, data=payload)
+
+    def process_report_task(self, task_type: str, symbol: str, target_chat_id: str):
+        """Worker function to process a single report task"""
+        loading_id = self.send_loading_message(target_chat_id, symbol)
+        
+        try:
+            if task_type == "market_update":
+                self.send_report(symbol, target_chat_id)
+            elif task_type == "sentinews":
+                self.send_sentiment_report(symbol, target_chat_id)
+        finally:
+            # Always try to delete the loading message
+            if loading_id:
+                self.delete_message(target_chat_id, loading_id)
 
     def send_report(self, symbol: str, target_chat_id: str):
         logger.info(f"Generating report for {symbol} to chat {target_chat_id}...")
@@ -55,9 +97,7 @@ class PriceIntelligenceBot:
         
         try:
             resp = requests.post(url, files=files, data=payload)
-            if resp.status_code == 200:
-                logger.info(f"✅ Report for {symbol} sent.")
-            else:
+            if resp.status_code != 200:
                 logger.error(f"❌ Telegram send failed: {resp.text}")
         except Exception as e:
             logger.error(f"❌ Error sending to Telegram: {e}")
@@ -88,20 +128,14 @@ class PriceIntelligenceBot:
         
         try:
             resp = requests.post(url, data=payload)
-            if resp.status_code == 200:
-                logger.info(f"✅ Sentiment report for {symbol} sent.")
-            else:
+            if resp.status_code != 200:
                 logger.error(f"❌ Telegram send failed: {resp.text}")
         except Exception as e:
             logger.error(f"❌ Error sending to Telegram: {e}")
 
     def send_message(self, target_chat_id: str, text: str):
         url = f"{self.api_url}/sendMessage"
-        payload = {
-            'chat_id': target_chat_id,
-            'text': text,
-            'parse_mode': 'HTML'
-        }
+        payload = {'chat_id': target_chat_id, 'text': text, 'parse_mode': 'HTML'}
         requests.post(url, data=payload)
 
     def handle_message(self, update):
@@ -111,32 +145,45 @@ class PriceIntelligenceBot:
         text = message.get("text", "")
         chat_id = message.get("chat", {}).get("id")
         
-        # Check for command /mt_market_update
-        # Support /mt_market_update and /mt_market_update@botname
-        cmd = text.split()[0].split('@')[0] if text else ""
+        cmd_parts = text.split()
+        if not cmd_parts: return
+        
+        cmd = cmd_parts[0].split('@')[0]
         
         if cmd == "/mt_market_update":
-            parts = text.split()
-            if len(parts) > 1:
-                symbol = parts[1].upper()
-                self.send_report(symbol, chat_id)
+            if len(cmd_parts) > 1:
+                self.task_queue.put(("market_update", cmd_parts[1].upper(), chat_id))
             else:
-                self.send_message(chat_id, "ℹ️ Usage: <code>/mt_market_update [SYMBOL]</code>\nExample: <code>/mt_market_update AAPL</code>")
+                self.send_message(chat_id, "ℹ️ Usage: <code>/mt_market_update [SYMBOL]</code>")
         
         elif cmd == "/mt_sentinews":
-            parts = text.split()
-            if len(parts) > 1:
-                symbol = parts[1].upper()
-                self.send_sentiment_report(symbol, chat_id)
+            if len(cmd_parts) > 1:
+                self.task_queue.put(("sentinews", cmd_parts[1].upper(), chat_id))
             else:
-                self.send_message(chat_id, "ℹ️ Usage: <code>/mt_sentinews [SYMBOL]</code>\nExample: <code>/mt_sentinews AAPL</code>")
-        
-        # Check if bot is tagged (assuming bot name is known, or just check for @botname)
-        # For simplicity, we just look for the command since Telegram handles command routing
-        # if the bot is in the group and privacy mode allows it.
+                self.send_message(chat_id, "ℹ️ Usage: <code>/mt_sentinews [SYMBOL]</code>")
+
+    def worker(self):
+        """Background worker to process the task queue sequentially"""
+        logger.info("Task worker started...")
+        while self.running:
+            try:
+                # Wait for a task with a timeout so we can check self.running
+                task = self.task_queue.get(timeout=1)
+                task_type, symbol, chat_id = task
+                self.process_report_task(task_type, symbol, chat_id)
+                self.task_queue.task_done()
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"Worker error: {e}")
 
     def start_polling(self):
         self.running = True
+        
+        # Start the sequential worker thread
+        self.worker_thread = threading.Thread(target=self.worker, daemon=True)
+        self.worker_thread.start()
+        
         logger.info("Bot polling started...")
         while self.running:
             updates = self.get_updates()
