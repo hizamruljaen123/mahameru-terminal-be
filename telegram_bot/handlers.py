@@ -18,9 +18,22 @@ class BotHandlers:
             payload["reply_to_message_id"] = reply_to_id
             
         try:
-            requests.post(url, json=payload, timeout=10)
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get("result", {}).get("message_id")
         except Exception as e:
             print(f"Error sending message: {e}")
+        return None
+
+    @staticmethod
+    def _delete_message(token, chat_id, message_id):
+        if not message_id: return
+        url = f"https://api.telegram.org/bot{token}/deleteMessage"
+        payload = {"chat_id": chat_id, "message_id": message_id}
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except:
+            pass
 
     @staticmethod
     def _send_photo(token, chat_id, photo_path, reply_to_id=None, caption=""):
@@ -47,27 +60,31 @@ class BotHandlers:
             return
 
         symbol = args[0].upper()
-        BotHandlers._send_message(token, chat_id, f"🔍 Fetching institutional intelligence for {symbol}...", reply_to_id=message_id)
-
-        # 1. Fetch History
+        
+        # --- PHASE 1: LOADING DATA ---
+        status_id = BotHandlers._send_message(token, chat_id, "⏳ `Loading data pasar...`", reply_to_id=message_id)
+        
         history_res = AsetpediaAPI.get_market_history(symbol)
+        BotHandlers._delete_message(token, chat_id, status_id)
+        
         if history_res.get("status") != "success":
             BotHandlers._send_message(token, chat_id, f"❌ Error: {history_res.get('message')}", reply_to_id=message_id)
             return
 
         history = history_res.get("history", [])
         
-        # 2. Generate & Send Chart
+        # --- PHASE 2: PREPARING CHART ---
+        status_id = BotHandlers._send_message(token, chat_id, "📈 `Menyiapkan grafik...`", reply_to_id=message_id)
         chart_path = MarketVisualizer.generate_ohlc_chart(symbol, history)
+        BotHandlers._delete_message(token, chat_id, status_id)
+
         if chart_path:
             BotHandlers._send_photo(token, chat_id, chart_path, caption=f"📊 Intraday Chart: {symbol}", reply_to_id=message_id)
             MarketVisualizer.cleanup(chart_path)
 
-        # 3. Table
-        table_text = format_ohlcv_table(history, limit=20)
-        BotHandlers._send_message(token, chat_id, f"📋 *Last 20 OHLCV Data:*\n{table_text}", reply_to_id=message_id)
-
-        # 4. News
+        # --- PHASE 3: FETCHING NEWS ---
+        status_id = BotHandlers._send_message(token, chat_id, "📰 `Mengumpulkan berita...`", reply_to_id=message_id)
+        
         is_crypto = "-USD" in symbol or len(symbol) <= 5
         news = []
         if is_crypto:
@@ -75,8 +92,18 @@ class BotHandlers:
             if crypto_res.get("status") == "success":
                 news = crypto_res.get("data", {}).get("news", [])
         
+        BotHandlers._delete_message(token, chat_id, status_id)
+
+        # --- PHASE 4: ASSEMBLING REPORT ---
+        status_id = BotHandlers._send_message(token, chat_id, "📄 `Menyusun laporan...`", reply_to_id=message_id)
+        
+        table_text = format_ohlcv_table(history, limit=20)
+        BotHandlers._send_message(token, chat_id, f"📋 *Last 20 OHLCV Data:*\n{table_text}", reply_to_id=message_id)
+
         news_text = format_news(news, limit=5)
         BotHandlers._send_message(token, chat_id, f"📰 *Latest Intelligence Headlines:*\n\n{news_text}", reply_to_id=message_id, disable_preview=True)
+        
+        BotHandlers._delete_message(token, chat_id, status_id)
 
     @staticmethod
     def analyze(token, chat_id, message_id, args):
@@ -85,9 +112,11 @@ class BotHandlers:
             return
             
         symbol = args[0].upper()
-        BotHandlers._send_message(token, chat_id, f"🤖 Running AI Multi-Agent analysis for {symbol}...", reply_to_id=message_id)
+        status_id = BotHandlers._send_message(token, chat_id, f"🤖 `AI sedang menganalisis {symbol}...`", reply_to_id=message_id)
         
         res = AsetpediaAPI.get_ai_analyze(symbol)
+        BotHandlers._delete_message(token, chat_id, status_id)
+        
         if res.get("status") == "success":
             verdict = res.get("data", "No analysis available.")
             BotHandlers._send_message(token, chat_id, f"🔮 *AI Technical Verdict for {symbol}:*\n\n{verdict}", reply_to_id=message_id)
@@ -96,8 +125,10 @@ class BotHandlers:
 
     @staticmethod
     def market_pulse(token, chat_id, message_id):
-        BotHandlers._send_message(token, chat_id, "🌐 Fetching global market pulse...", reply_to_id=message_id)
+        status_id = BotHandlers._send_message(token, chat_id, "🌐 `Mengkalkulasi denyut pasar...`", reply_to_id=message_id)
         res = AsetpediaAPI.get_market_watchlist()
+        BotHandlers._delete_message(token, chat_id, status_id)
+        
         if res.get("status") == "success":
             data = res.get("data", {})
             summary = []

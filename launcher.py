@@ -93,7 +93,7 @@ TIER4 = [
 
 # TIER 5: EXTERNAL CONNECTORS (Telegram, Webhook, etc.)
 TIER5 = [
-    [PYTHON_EXE, get_p(os.path.join("telegram_bot", "main.py"))],
+    [PYTHON_EXE, get_p(os.path.join("telegram_bot", "telegram_bot_service.py")), "--port", "5010"],
 ]
 
 SERVICE_PORTS = {
@@ -129,7 +129,8 @@ SERVICE_PORTS = {
     "government_facility_service.py": [8150],
     "military_service.py": [8160],
     "crypto_stream_service.py": [8092],
-    "dashboard_service.py": [8000]
+    "dashboard_service.py": [8000],
+    "telegram_bot_service.py": [5010]
 }
 
 def clean_port(port):
@@ -231,7 +232,7 @@ def main():
             [PYTHON_EXE, get_p("geo_data_service.py")],
             [PYTHON_EXE, get_p("crypto_stream_service.py")],
             [PYTHON_EXE, get_p("backup_service.py")],
-            [PYTHON_EXE, get_p(os.path.join("telegram_bot", "main.py"))]
+            [PYTHON_EXE, get_p(os.path.join("telegram_bot", "telegram_bot_service.py")), "--port", "5010"]
         ]
         for cmd in DEV_SERVICES:
             launch_cmd(cmd)

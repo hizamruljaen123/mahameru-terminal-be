@@ -15,9 +15,10 @@ load_dotenv()
 
 # Enable logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+    format='[TELEGRAM_BOT] %(asctime)s - %(levelname)s - %(message)s', 
+    level=logging.INFO
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("telegram_bot")
 
 class DirectTelegramBot:
     def __init__(self, token):
@@ -118,6 +119,14 @@ class DirectTelegramBot:
             time.sleep(0.5)
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Asetpedia Telegram Bot Service")
+    parser.add_argument("--port", type=int, help="Dummy port for launcher consistency")
+    args = parser.parse_args()
+    
+    if args.port:
+        logger.info(f"Service initialized with virtual port control: {args.port}")
+
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token or "YOUR_TELEGRAM_BOT_TOKEN_HERE" in token:
         print("CRITICAL ERROR: TELEGRAM_BOT_TOKEN not configured correctly in .env")
