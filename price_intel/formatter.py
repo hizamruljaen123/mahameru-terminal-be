@@ -201,8 +201,7 @@ class PriceFormatter:
             addplot=apds,
             returnfig=True,
             figsize=(12, 10 if method_id != "smc" else 8),
-            tight_layout=True,
-            facecolor='#0a0a0a' # Setting dark background for the whole figure
+            tight_layout=True
         )
         
         ax_main = axes[0]
