@@ -492,32 +492,53 @@ def update_news_cache_loop(assigned_categories=None):
 
 @app.route('/api/news/data', methods=['GET'])
 def get_current_data():
-    """Retrieve hot news with MySQL archive fallback"""
+    """Retrieve hot news with MySQL archive fallback (optimized batch query)"""
     current_news = cache_manager.get_hot_news()
     priority_cats = [c.upper() for c in PRIORITY_CATEGORIES]
 
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        for cat in priority_cats:
-            if cat not in current_news or len(current_news[cat]) == 0:
-                cursor.execute("""
-                    SELECT id, title, link, description, pubDate as timestamp,
-                           sourceName as source, imageUrl, category,
-                           sentiment, sentimentScore, impactScore
-                    FROM article WHERE UPPER(category) LIKE %s
-                    ORDER BY pubDate DESC LIMIT 100
-                """, (f"%{cat}%",))
-                archive_items = cursor.fetchall()
-                if archive_items:
-                    for item in archive_items:
-                        if hasattr(item.get('timestamp'), 'timestamp'):
-                            item['timestamp'] = item['timestamp'].timestamp()
-                    current_news[cat] = archive_items
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        log.error(f"Archive fallback error: {e}")
+    # Find which categories are empty in the live cache
+    empty_cats = [cat for cat in priority_cats if cat not in current_news or len(current_news[cat]) == 0]
+
+    # FIX: Single batch query for all empty categories instead of N+1 loop
+    if empty_cats:
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            placeholders = ', '.join(['%s'] * len(empty_cats))
+            cursor.execute(f"""
+                SELECT id, title, link, description, pubDate as timestamp,
+                       sourceName as source, imageUrl, category,
+                       sentiment, sentimentScore, impactScore
+                FROM article
+                WHERE UPPER(category) IN ({placeholders})
+                ORDER BY pubDate DESC
+                LIMIT 2000
+            """, tuple(empty_cats))
+
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            # Group results by category in Python (fast, no extra DB trips)
+            archive_map = {}
+            for item in rows:
+                cat = (item.get('category') or 'UNCATEGORIZED').upper().strip()
+                # Normalize timestamp from datetime object
+                if hasattr(item.get('timestamp'), 'timestamp'):
+                    item['timestamp'] = item['timestamp'].timestamp()
+                if cat not in archive_map:
+                    archive_map[cat] = []
+                if len(archive_map[cat]) < 50:  # Cap 50 per category
+                    archive_map[cat].append(item)
+
+            # Merge into current_news only for empty categories
+            for cat, items in archive_map.items():
+                if cat not in current_news or len(current_news[cat]) == 0:
+                    current_news[cat] = items
+
+        except Exception as e:
+            log.error(f"Archive batch fallback error: {e}")
 
     current_status = cache_manager.get_status_cache()
     cache_manager.reset_new_items_count()
