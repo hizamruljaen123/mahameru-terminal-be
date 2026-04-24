@@ -498,7 +498,13 @@ def generate_signals(df, indicators):
     elif pct < -20: verdict = "SELL"
     else: verdict = "NEUTRAL"
 
-    return {"signals": weights, "score": round(display_pct, 1), "verdict": verdict, "regime": "TRENDING" if is_trending else ("RANGING" if is_ranging else "NEUTRAL")}
+    return {
+        "signals": weights, 
+        "score": round(display_pct, 1), 
+        "pct": round(display_pct, 1), 
+        "verdict": verdict, 
+        "regime": "TRENDING" if is_trending else ("RANGING" if is_ranging else "NEUTRAL")
+    }
 
 # ============================================================================
 #  MAIN ANALYZE ENDPOINT
@@ -562,7 +568,10 @@ def analyze(symbol):
             "adx":      last(indicators.get('adx', {}), 'adx'),
             "sar":      last(indicators.get('sar')),
             "mfi":      last(indicators.get('mfi')),
-            "bb_pct":   last(indicators.get('bb', {}), 'pct')
+            "bb_pct":   last(indicators.get('bb', {}), 'pct'),
+            "atr":      last(indicators.get('atr')),
+            "atr_pct":  last(indicators.get('atr_pct')),
+            "hv20":     last(indicators.get('hv20'))
         }
 
         # Moving averages table
@@ -581,7 +590,7 @@ def analyze(symbol):
             "period_end":   df.index[-1].strftime('%Y-%m-%d'),
             "info": {
                 "name":     info.get('longName', symbol),
-                "sector":   info.get('sector', 'N/A'),
+                "sector":   info.get('sector') or ('CRYPTOCURRENCY' if '-USD' in norm or 'USDT' in norm else 'N/A'),
                 "industry": info.get('industry', 'N/A'),
                 "market_cap": info.get('marketCap'),
                 "currency": info.get('currency', 'USD'),

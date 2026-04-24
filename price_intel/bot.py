@@ -10,6 +10,19 @@ from .formatter import PriceFormatter
 from .sentiment import SentimentAnalyzer
 from .deep_ta import DeepTAClient
 
+# --- New Modular Handlers ---
+from .bot_mt_crypto import (
+    handle_mt_crypto_pulse, handle_mt_ta_score, handle_mt_deep_ai,
+    handle_mt_whale_track, handle_mt_derivatives, handle_mt_macro_index,
+    handle_mt_forex_fx, handle_mt_commodities
+)
+from .bot_mt_geo import (
+    handle_mt_disaster, handle_mt_vessel_find, handle_mt_oil_reserves,
+    handle_mt_oil_trades, handle_mt_port_traffic, handle_mt_news_brief,
+    handle_mt_sentiment, handle_mt_entity_map
+)
+from .bot_mt_alerts import run_mt_alert_loop
+
 logger = logging.getLogger("PriceIntel.Bot")
 
 class PriceIntelligenceBot:
@@ -277,6 +290,24 @@ class PriceIntelligenceBot:
             else:
                 self.send_message(chat_id, "ℹ️ Usage: <code>/mt_news [KATA KUNCI]</code>")
 
+        # --- NEW DISPATCHER MAPPINGS ---
+        elif cmd == "/mt_crypto_pulse": handle_mt_crypto_pulse(chat_id)
+        elif cmd == "/mt_ta_score":     handle_mt_ta_score(chat_id, args)
+        elif cmd == "/mt_deep_ai":      handle_mt_deep_ai(chat_id, args)
+        elif cmd == "/mt_whale_track":  handle_mt_whale_track(chat_id)
+        elif cmd == "/mt_derivatives":  handle_mt_derivatives(chat_id)
+        elif cmd == "/mt_macro_index":  handle_mt_macro_index(chat_id)
+        elif cmd == "/mt_forex_fx":     handle_mt_forex_fx(chat_id)
+        elif cmd == "/mt_commodities":  handle_mt_commodities(chat_id)
+        elif cmd == "/mt_disaster":     handle_mt_disaster(chat_id)
+        elif cmd == "/mt_vessel_find":  handle_mt_vessel_find(chat_id, args)
+        elif cmd == "/mt_oil_reserves": handle_mt_oil_reserves(chat_id)
+        elif cmd == "/mt_oil_trades":   handle_mt_oil_trades(chat_id)
+        elif cmd == "/mt_port_traffic": handle_mt_port_traffic(chat_id)
+        elif cmd == "/mt_news_brief":   handle_mt_news_brief(chat_id, args)
+        elif cmd == "/mt_sentiment":    handle_mt_sentiment(chat_id, args)
+        elif cmd == "/mt_entity_map":   handle_mt_entity_map(chat_id, args)
+
     def worker(self):
         """Background worker to process the task queue sequentially"""
         logger.info("Task worker started...")
@@ -298,8 +329,12 @@ class PriceIntelligenceBot:
         # Start the sequential worker thread
         self.worker_thread = threading.Thread(target=self.worker, daemon=True)
         self.worker_thread.start()
+
+        # Start the Intelligence Alert Loop
+        alert_thread = threading.Thread(target=run_mt_alert_loop, daemon=True)
+        alert_thread.start()
         
-        logger.info("Bot polling started...")
+        logger.info("Bot polling and alert loops started...")
         while self.running:
             updates = self.get_updates()
             for update in updates:

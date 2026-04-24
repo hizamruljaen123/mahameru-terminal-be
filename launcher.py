@@ -142,7 +142,8 @@ def clean_port(port):
         if os.name == 'nt':
             # Windows implementation
             cmd = f'netstat -ano | findstr LISTENING | findstr :{port}'
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode()
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            output = res.stdout
             
             pids_to_kill = set()
             for line in output.splitlines():
@@ -176,58 +177,75 @@ def clean_port(port):
     except Exception as e:
         print(f"[SYSTEM] ERROR CLEANING PORT {port}: {e}")
 
-PROCESSES = []
-
+PROCESS_REGISTRY = [] # List of { 'file': str, 'cmd': list, 'proc': Popen, 'mtime': float }
 
 def log_relay(name, pipe):
+    LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+    if not os.path.exists(LOGS_DIR):
+        os.makedirs(LOGS_DIR, exist_ok=True)
+    
+    log_file = os.path.join(LOGS_DIR, name.replace('.py', '.log'))
     try:
-        for line in iter(pipe.readline, b''):
-            msg = line.decode('utf-8', errors='ignore').strip()
-            if msg:
-                print(f"[{name.upper():16}] {msg}")
-    except:
-        pass
+        # Append mode to keep history, or 'w' to reset on each launch
+        with open(log_file, 'a', encoding='utf-8') as f:
+            for line in iter(pipe.readline, b''):
+                msg = line.decode('utf-8', errors='ignore').strip()
+                if msg:
+                    print(f"[{name.upper():16}] {msg}")
+                    f.write(f"{msg}\n")
+                    f.flush()
+    except Exception as e:
+        print(f"LOG ERROR for {name}: {e}")
 
 def launch_cmd(cmd):
     try:
-        name = os.path.basename(cmd[1])
+        file_path = cmd[1]
+        name = os.path.basename(file_path)
+        mtime = os.path.getmtime(file_path) if os.path.exists(file_path) else 0
         
-        # Determine specific ports to clean for this instance
+        # Determine specific ports to clean
         target_ports = []
-        # Check for explicit --port
         if "--port" in cmd:
             try:
                 idx = cmd.index("--port")
                 target_ports.append(cmd[idx+1])
             except: pass
         
-        # Fallback to registry if no ports found (only clean registry defaults if no specific port requested)
         if not target_ports:
             target_ports = SERVICE_PORTS.get(name, [])
         
-        # Aggressively clean ports
         for p_num in target_ports:
             clean_port(p_num)
 
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        PROCESSES.append(p)
+        
+        reg_entry = {
+            'file': file_path,
+            'cmd': cmd,
+            'proc': p,
+            'mtime': mtime,
+            'name': name
+        }
+        PROCESS_REGISTRY.append(reg_entry)
+        
         threading.Thread(target=log_relay, args=(name, p.stdout), daemon=True).start()
         print(f"LAUNCHED Node: {name} on PID: {p.pid}")
+        return reg_entry
     except Exception as e:
         print(f"FAILED to launch {cmd}: {e}")
+        return None
 
 def main():
     print("--- ASETPEDIA UNIFIED OPERATIONAL HUB ---")
     print(f"BOOTING COMPREHENSIVE CLUSTER FROM: {BASE_DIR}")
     
-    # --- SYSTEM MODE (Read from .env) ---
     DEV_MODE = os.getenv("DEV_MODE", "True").lower() == "true"
     
+    services_to_start = []
     if DEV_MODE:
         print("[SYSTEM] !!! RUNNING IN DEVELOPMENT MODE !!!")
-        print("[SYSTEM] Only activating essential modules for Entity Correlation")
-        DEV_SERVICES = [
-            [PYTHON_EXE, get_p("gnews_service.py")],           # Port 5006 (Intelligence Provider)
+        services_to_start = [
+            [PYTHON_EXE, get_p("gnews_service.py")],
             [PYTHON_EXE, get_p("infrastructure_service.py")],
             [PYTHON_EXE, get_p("port_service.py")],
             [PYTHON_EXE, get_p(os.path.join("data", "power_plant_service.py"))],
@@ -237,34 +255,59 @@ def main():
             [PYTHON_EXE, get_p("backup_service.py")],
             [PYTHON_EXE, get_p("entity_correlation_service.py")],
             [PYTHON_EXE, get_p("price_intelligence_service.py")],
-            # Telegram Service (Active via Price Intel)
-
+            [PYTHON_EXE, get_p("ta_service.py")],
         ]
-        for cmd in DEV_SERVICES:
-            launch_cmd(cmd)
-            time.sleep(1.0)
     else:
         WAVES = [TIER0, TIER1, TIER2, TIER3, TIER4, TIER5]
-        for i, wave in enumerate(WAVES):
-            print(f"\n[SYSTEM] === STARTING_WAVE_{i}_{len(wave)}_SERVICES ===")
-            for cmd in wave:
-                launch_cmd(cmd)
-                time.sleep(1.0) # Increased for stability
-            time.sleep(5.0) # Wait longer for services to warm up
+        for wave in WAVES:
+            services_to_start.extend(wave)
+
+    for cmd in services_to_start:
+        launch_cmd(cmd)
+        time.sleep(0.5)
     
-    print("\nALL NODES INITIALIZED. CONSOLIDATED LOG STREAM ACTIVE.")
+    print("\nALL NODES INITIALIZED. SMART WATCHER ACTIVE.")
     
     try:
         while True:
-            time.sleep(2)
-            for p in PROCESSES:
-                if p.poll() is not None:
-                    print(f"CRITICAL: {p.args[1]} died. Global restart recommended.")
-                    # In a real environment we'd respawn, but here we just warn
+            time.sleep(3)
+            # Check for crashes and file changes
+            for i, entry in enumerate(PROCESS_REGISTRY):
+                file_path = entry['file']
+                proc = entry['proc']
+                
+                # 1. Check for Crash
+                if proc.poll() is not None:
+                    print(f"[RECOVERY] Service {entry['name']} died (PID: {proc.pid}). Restarting...")
+                    PROCESS_REGISTRY.pop(i)
+                    launch_cmd(entry['cmd'])
+                    break # Break to avoid list mutation issues in loop
+
+                # 2. Check for File Changes (Hot Reload)
+                if os.path.exists(file_path):
+                    current_mtime = os.path.getmtime(file_path)
+                    if current_mtime > entry['mtime']:
+                        print(f"[WATCHER] File Change Detected: {entry['name']}. Performing Selective Restart...")
+                        
+                        # Kill the specific process
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=5)
+                        except:
+                            try: proc.kill()
+                            except: pass
+                        
+                        # Restart
+                        PROCESS_REGISTRY.pop(i)
+                        launch_cmd(entry['cmd'])
+                        break # Break to avoid list mutation issues
+                        
     except KeyboardInterrupt:
         print("\nSHUTTING DOWN ALL NODES...")
-        for p in PROCESSES:
-            p.terminate()
+        for entry in PROCESS_REGISTRY:
+            try:
+                entry['proc'].terminate()
+            except: pass
 
 if __name__ == "__main__":
     main()

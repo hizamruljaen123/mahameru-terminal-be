@@ -17,6 +17,10 @@ import re
 from typing import Dict, Any, List, Optional
 from crypto_agents import crypto_multi_agent
 import yfinance as yf
+from crypto_onchain import onchain_analyzer
+from crypto_derivatives import derivatives_analyzer
+from crypto_quant import quant_analyzer
+from crypto_macro import macro_analyzer
 
 class MonteCarloSimulator:
     def __init__(self, config=None):
@@ -125,6 +129,38 @@ state: Dict[str, Any] = {
 }
 _RSS_LOCK = threading.Lock()  # Thread-safe RSS cache access
 
+# --- CMC CONFIG ---
+CMC_API_KEY = os.getenv('CMC_API_KEY')
+CMC_API_BASE = os.getenv('CMC_API_BASE', 'https://pro-api.coinmarketcap.com')
+
+def fetch_cmc_top_coins(limit=100):
+    """Fetch top coins directly from CoinMarketCap Professional API"""
+    if not CMC_API_KEY:
+        return []
+    
+    url = f"{CMC_API_BASE}/v1/cryptocurrency/listings/latest"
+    parameters = {
+        'start': '1',
+        'limit': str(limit),
+        'convert': 'USD'
+    }
+    headers = {
+        'Accepts': 'application/json',
+        'X-CMC_PRO_API_KEY': CMC_API_KEY,
+    }
+
+    try:
+        response = requests.get(url, params=parameters, headers=headers)
+        data = response.json()
+        if data.get('status', {}).get('error_code') == 0:
+            return data.get('data', [])
+        else:
+            print(f"[CMC_ERROR] {data.get('status', {}).get('error_message')}")
+            return []
+    except Exception as e:
+        print(f"[CMC_EXCEPTION] {e}")
+        return []
+
 MAJOR_CRYPTO_SYMBOLS = [
     "BTC-USD", "ETH-USD", "USDT-USD", "XRP-USD", "BNB-USD", "SOL-USD", "USDC-USD", "DOGE-USD", "ADA-USD", "TRX-USD",
     "AVAX-USD", "LINK-USD", "SHIB-USD", "TON-USD", "WBTC-USD", "SUI20947-USD", "DOT-USD", "BCH-USD", "LTC-USD", "NEAR-USD",
@@ -182,6 +218,7 @@ def safe_float(val, default=0.0):
 # CRYPTO DATA CACHE
 CRYPTO_CACHE = {
     "top_coins": [],
+    "cmc_full": [],
     "last_updated": 0
 }
 
@@ -203,24 +240,35 @@ def set_detail_cache(symbol, data):
 
 async def fetch_metadata_loop():
     """Background task to fetch coin names and market caps every 60 minutes"""
-    print("=:: STARTING CRYPTO_METADATA UPDATER ::= ")
+    print("=:: STARTING CRYPTO_METADATA UPDATER (CMC/yF) ::= ")
     while True:
         try:
-            # We use yf.Tickers for faster info access if possible, 
-            # but yfinance info is still one-by-one under the hood.
-            for ticker in MAJOR_CRYPTO_SYMBOLS:
-                try:
-                    t = yf.Ticker(ticker)
-                    info = t.info
+            # Try CMC first
+            cmc_data = fetch_cmc_top_coins(100)
+            if cmc_data:
+                CRYPTO_CACHE["cmc_full"] = cmc_data
+                for coin in cmc_data:
+                    ticker = f"{coin['symbol']}-USD"
                     METADATA_STORE[ticker] = {
-                        "name": info.get("name") or info.get("shortName") or ticker.replace("-USD", ""),
-                        "market_cap": float(info.get("marketCap") or 0.0)
+                        "name": coin['name'],
+                        "market_cap": float(coin['quote']['USD']['market_cap']),
+                        "cmc_rank": coin['cmc_rank']
                     }
-                    # Small sleep to avoid hitting rate limits
-                    await asyncio.sleep(0.5)
-                except:
-                    continue
-            print(f"[METADATA_SYNC] Updated metadata for {len(METADATA_STORE)} assets.")
+                print(f"[METADATA_SYNC] CMC update success. Metadata for {len(cmc_data)} assets.")
+            else:
+                # Fallback to yfinance
+                for ticker in MAJOR_CRYPTO_SYMBOLS:
+                    try:
+                        t = yf.Ticker(ticker)
+                        info = t.info
+                        METADATA_STORE[ticker] = {
+                            "name": info.get("name") or info.get("shortName") or ticker.replace("-USD", ""),
+                            "market_cap": float(info.get("marketCap") or 0.0)
+                        }
+                        await asyncio.sleep(0.5)
+                    except:
+                        continue
+                print(f"[METADATA_SYNC] Fallback yFinance update completed.")
         except Exception as e:
             print(f"[METADATA_SYNC_ERROR] {e}")
         await asyncio.sleep(3600) # Update metadata every hour
@@ -230,44 +278,45 @@ async def fetch_top_coins_loop():
     print("=:: STARTING CRYPTO_SERVICE BACKGROUND UPDATER (yFinance) ::= ")
     while True:
         try:
-            # Fetch 8 days of hourly data to calculate 1h, 24h, and 7d changes
-            # This is much more efficient than 50 separate historical calls
-            data = yf.download(MAJOR_CRYPTO_SYMBOLS, period="8d", interval="1h", group_by='ticker', progress=False)
+            # Get top symbols dynamically
+            current_symbols = []
+            if METADATA_STORE:
+                sorted_meta = sorted(METADATA_STORE.items(), key=lambda x: x[1].get('market_cap', 0), reverse=True)
+                current_symbols = [k for k, v in sorted_meta[:30]] # Sync top 30 live
+            
+            if not current_symbols:
+                current_symbols = MAJOR_CRYPTO_SYMBOLS
+
+            data = yf.download(current_symbols, period="8d", interval="1h", group_by='ticker', progress=False)
             
             coins = []
-            for i, ticker in enumerate(MAJOR_CRYPTO_SYMBOLS):
+            for i, ticker in enumerate(current_symbols):
                 try:
                     symbol_raw = ticker.replace("-USD", "")
-                    df = data[ticker] if len(MAJOR_CRYPTO_SYMBOLS) > 1 else data
-                    if df.empty or len(df) < 2: continue
+                    df = data[ticker] if len(current_symbols) > 1 else data
+                    if df is None or df.empty or len(df) < 2: continue
                     
-                    # Latest row
                     last_row = df.iloc[-1]
                     price = float(last_row['Close'])
                     
-                    # 1h change (compare with previous hourly candle)
                     price_1h = float(df.iloc[-2]['Close']) if len(df) >= 2 else price
                     change_1h = ((price - price_1h) / price_1h * 100) if price_1h != 0 else 0
                     
-                    # 24h change (approx 24 candles ago)
                     idx_24h = -25 if len(df) >= 25 else 0
                     price_24h = float(df.iloc[idx_24h]['Close'])
                     change_24h = ((price - price_24h) / price_24h * 100) if price_24h != 0 else 0
                     
-                    # 7d change (approx the start of our 8d fetch)
                     price_7d = float(df.iloc[0]['Close'])
                     change_7d = ((price - price_7d) / price_7d * 100) if price_7d != 0 else 0
                     
-                    # Volume 24h (Sum of last 24 candles)
                     vol_24h = float(df.iloc[-24:]['Volume'].sum()) if len(df) >= 24 else float(df['Volume'].sum())
                     
-                    # Get metadata from store
                     meta = METADATA_STORE.get(ticker, {})
                     
                     coins.append({
                         "symbol": symbol_raw,
                         "name": meta.get("name", symbol_raw),
-                        "rank": i + 1,
+                        "rank": meta.get("cmc_rank", i + 1),
                         "price": safe_float(price),
                         "price_idr": safe_float(price * state["usd_idr_rate"]),
                         "market_cap": safe_float(meta.get("market_cap", 0.0)),
@@ -298,6 +347,20 @@ def get_top_coins(top: int = 100):
 
     # If cache empty, return empty list (loop will fill it)
     return clean_nans({"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": False})
+
+@app.get("/api/crypto/cmc/list")
+def get_cmc_list():
+    """Returns the full top 100 list from CMC cache"""
+    if CRYPTO_CACHE["cmc_full"]:
+        return {"status": "success", "data": CRYPTO_CACHE["cmc_full"]}
+    
+    # Trigger one-time fetch if cache empty
+    data = fetch_cmc_top_coins(100)
+    if data:
+        CRYPTO_CACHE["cmc_full"] = data
+        return {"status": "success", "data": data}
+    
+    return {"status": "error", "message": "CMC data unavailable"}
 
 @app.get("/api/crypto/detail/{symbol}")
 def get_coin_detail(symbol: str, period: str = "1mo"):
@@ -514,10 +577,161 @@ def get_crypto_seasonality(symbol: str):
         print(f"Seasonality Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================
+# INSTITUTIONAL ANALYTICS ENDPOINTS
+# ============================================================
+
+@app.get("/api/crypto/onchain/{symbol}")
+def get_onchain_data(symbol: str):
+    try:
+        data = onchain_analyzer.get_full_report(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/onchain/flow/{symbol}")
+def get_exchange_flow(symbol: str, period: str = "3mo"):
+    try:
+        data = onchain_analyzer.compute_exchange_flow(symbol, period)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/onchain/whales/{symbol}")
+def get_whale_activity(symbol: str):
+    try:
+        data = onchain_analyzer.detect_whale_activity(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/onchain/nvt/{symbol}")
+def get_nvt_ratio(symbol: str):
+    try:
+        data = onchain_analyzer.compute_nvt_ratio(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/derivatives/{symbol}")
+def get_derivatives_data(symbol: str):
+    try:
+        data = derivatives_analyzer.get_full_derivatives(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/derivatives/funding/{symbol}")
+def get_funding_rate(symbol: str):
+    try:
+        sym = symbol.replace("-USD","") + "USDT"
+        data = derivatives_analyzer.get_funding_rates(sym)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/derivatives/oi/{symbol}")
+def get_open_interest_ep(symbol: str):
+    try:
+        sym = symbol.replace("-USD","") + "USDT"
+        data = derivatives_analyzer.get_open_interest(sym)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/derivatives/liquidations/{symbol}")
+def get_liquidation_zones(symbol: str):
+    try:
+        sym = symbol.replace("-USD","") + "USDT"
+        data = derivatives_analyzer.estimate_liquidation_zones(sym)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/quant/{symbol}")
+def get_quant_data(symbol: str):
+    try:
+        data = quant_analyzer.get_full_quant(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/quant/correlation/{symbol}")
+def get_correlation_matrix(symbol: str):
+    try:
+        data = quant_analyzer.compute_correlation_matrix(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/quant/drawdown/{symbol}")
+def get_drawdown(symbol: str):
+    try:
+        data = quant_analyzer.compute_drawdown_analysis(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/quant/volatility/{symbol}")
+def get_volatility(symbol: str):
+    try:
+        data = quant_analyzer.compute_volatility_metrics(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/quant/beta/{symbol}")
+def get_beta(symbol: str):
+    try:
+        data = quant_analyzer.compute_beta(symbol)
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/macro")
+def get_macro_data():
+    try:
+        data = macro_analyzer.get_full_macro()
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/macro/etf")
+def get_etf_flows():
+    try:
+        data = macro_analyzer.get_etf_flows()
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/macro/stablecoin")
+def get_stablecoin_metrics():
+    try:
+        data = macro_analyzer.get_stablecoin_metrics()
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/macro/feargreed")
+def get_fear_greed():
+    try:
+        data = macro_analyzer.get_fear_greed_index()
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/crypto/macro/dominance")
+def get_dominance():
+    try:
+        data = macro_analyzer.get_market_dominance()
+        return clean_nans({"status": "success", "data": data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def root():
     """Root handler for avoiding 404 on service heartbeat probes."""
-    return {"status": "online", "service": "crypto_data_service"}
+    return {"status": "online", "service": "crypto_data_service_v10_institutional"}
 
 @app.on_event("startup")
 async def startup_event():
@@ -525,5 +739,5 @@ async def startup_event():
     asyncio.create_task(fetch_top_coins_loop())
 
 if __name__ == "__main__":
-    print("=:: MEMULAI SERVICE PYTHON CRYPTO DATA (v9 + yFinance) ::=")
+    print("=:: MEMULAI SERVICE PYTHON CRYPTO DATA (v10 + INSTITUTIONAL) ::=")
     uvicorn.run("crypto_service:app", host="0.0.0.0", port=8085, reload=False)
