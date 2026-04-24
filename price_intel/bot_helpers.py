@@ -14,18 +14,40 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def send_message(chat_id, text, parse_mode="HTML"):
-    """Send a Telegram message to a specific chat."""
-    if not TELEGRAM_TOKEN:
-        return
+import threading
+import time
+
+def delete_message(chat_id, message_id, token):
+    """Helper to delete a message after a delay."""
     try:
         requests.post(
+            f"https://api.telegram.org/bot{token}/deleteMessage",
+            json={"chat_id": chat_id, "message_id": message_id},
+            timeout=5
+        )
+    except: pass
+
+def send_message(chat_id, text, parse_mode="HTML", auto_delete_seconds=None):
+    """Send a Telegram message, optionally scheduling it for deletion."""
+    if not TELEGRAM_TOKEN:
+        return None
+    try:
+        resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
             json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
             timeout=8
         )
+        if resp.status_code == 200:
+            msg_data = resp.json().get("result", {})
+            msg_id = msg_data.get("message_id")
+            
+            if auto_delete_seconds and msg_id:
+                threading.Timer(auto_delete_seconds, delete_message, [chat_id, msg_id, TELEGRAM_TOKEN]).start()
+            
+            return msg_id
     except Exception as e:
         print(f"[Bot] send_message error: {e}")
+    return None
 
 # ─── Port Map for Mahameru Backend Services ───────────────────────────────────
 MAHAMERU_PORTS = {

@@ -115,7 +115,7 @@ def handle_mt_whale_track(chat_id):
         to  = tx.get("to", "?")[:12]
         sym = tx.get("symbol", "?")
         rows.append(f"  💰 {sym} ${val}  {fr} → {to}")
-    send_message(chat_id, f"🐋 <b>WHALE TRACKER (On-Chain)</b>\n\n<pre>{'chr(10)'.join(rows)}</pre>")
+    send_message(chat_id, f"🐋 <b>WHALE TRACKER (On-Chain)</b>\n\n<pre>" + "\n".join(rows) + "</pre>")
 
 
 # ─── /mt_derivatives ─────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ def handle_mt_derivatives(chat_id):
         oi = fmt_number(info.get("open_interest"))
         liq = fmt_number(info.get("liquidations_24h"))
         rows.append(f"  {sym:<6} FR:{fr:+.4f}%  OI:{oi}  Liq:{liq}")
-    send_message(chat_id, f"📉 <b>DERIVATIVES DASHBOARD</b>\n\n<pre>{'chr(10)'.join(rows[:10])}</pre>")
+    send_message(chat_id, f"📉 <b>DERIVATIVES DASHBOARD</b>\n\n<pre>" + "\n".join(rows[:10]) + "</pre>")
 
 
 # ─── /mt_macro_index ─────────────────────────────────────────────────────────
@@ -139,10 +139,10 @@ def handle_mt_macro_index(chat_id):
     if not data:
         send_message(chat_id, "⚠️ Macro data unavailable.")
         return
-    lines = [f"🌐 <b>MACRO ECONOMIC INDEX</b>\n"]
+    lines = [f"🌐 <b>MACRO ECONOMIC INDEX</b>"]
     for k, v in data.items():
         lines.append(f"  {str(k).replace('_',' ').upper():<25}: {v}")
-    send_message(chat_id, "\n".join(lines))
+    send_message(chat_id, lines[0] + "\n<pre>" + "\n".join(lines[1:]) + "</pre>")
 
 
 # ─── /mt_forex_fx ────────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ def handle_mt_forex_fx(chat_id):
         return
     pairs = data.get("rates", data) if isinstance(data, dict) else {}
     rows = [f"  {pair:<10}: {rate}" for pair, rate in list(pairs.items())[:12]]
-    send_message(chat_id, f"💱 <b>FOREX RATES</b>\n⏱ {datetime.now().strftime('%H:%M')}\n\n<pre>{'chr(10)'.join(rows)}</pre>")
+    send_message(chat_id, f"💱 <b>FOREX RATES</b>\n⏱ {datetime.now().strftime('%H:%M')}\n\n<pre>" + "\n".join(rows) + "</pre>")
 
 
 # ─── /mt_commodities ─────────────────────────────────────────────────────────
@@ -163,10 +163,10 @@ def handle_mt_commodities(chat_id):
         send_message(chat_id, "⚠️ Commodity service unavailable (port 8087)")
         return
     items = data.get("commodities", data) if isinstance(data, dict) else {}
-    lines = [f"🛢️ <b>COMMODITIES DASHBOARD</b>\n"]
+    lines = [f"🛢️ <b>COMMODITIES DASHBOARD</b>"]
     for name, info in (items.items() if isinstance(items, dict) else []):
         price = info.get("price", info) if isinstance(info, dict) else info
         pct   = info.get("change_pct", "") if isinstance(info, dict) else ""
         arrow = "🟢" if str(pct).startswith("+") or (isinstance(pct, (int, float)) and pct >= 0) else "🔴"
         lines.append(f"  {arrow} {name:<15}: {fmt_number(price)} USD  ({pct}%)")
-    send_message(chat_id, "\n".join(lines))
+    send_message(chat_id, lines[0] + "\n<pre>" + "\n".join(lines[1:]) + "</pre>")

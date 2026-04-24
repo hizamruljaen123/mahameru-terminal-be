@@ -216,10 +216,17 @@ class PriceIntelligenceBot:
         except Exception as e:
             logger.error(f"❌ Error sending Deep TA to Telegram: {e}")
 
-    def send_message(self, target_chat_id: str, text: str):
+    def send_message(self, target_chat_id: str, text: str, auto_delete_seconds: Optional[int] = None):
         url = f"{self.api_url}/sendMessage"
         payload = {'chat_id': target_chat_id, 'text': text, 'parse_mode': 'HTML'}
-        requests.post(url, data=payload)
+        try:
+            resp = requests.post(url, json=payload, timeout=8)
+            if resp.status_code == 200 and auto_delete_seconds:
+                msg_id = resp.json().get("result", {}).get("message_id")
+                if msg_id:
+                    threading.Timer(auto_delete_seconds, self.delete_message, [target_chat_id, msg_id]).start()
+        except Exception as e:
+            logger.error(f"Error in send_message: {e}")
 
     def handle_message(self, update):
         message = update.get("message")
@@ -256,30 +263,34 @@ class PriceIntelligenceBot:
 
         elif cmd == "/mt_help":
             help_text = (
-                "<b>🛠️ MAHAMERU TERMINAL - COMMAND HELP</b>\n\n"
-                "<b>1. Analisis Pasar Real-time</b>\n"
-                "<code>/mt_market_update [SYMBOL]</code>\n"
-                "Deskripsi: Dashboard kuantitatif, indikator teknikal (RSI, ADX, BB), dan grafik candlestick.\n"
-                "Contoh: <code>/mt_market_update AAPL</code>\n\n"
+                "🏔️ <b>MAHAMERU TERMINAL — INTELLIGENCE</b>\n\n"
+                "<b>── CRYPTO & FINANCE ──</b>\n"
+                "<code>/mt_crypto_pulse</code>  Market pulse (Top 5 & Dom)\n"
+                "<code>/mt_whale_track</code>   On-chain whale activities\n"
+                "<code>/mt_derivatives</code>   Funding rates & liquidations\n"
+                "<code>/mt_macro_index</code>   Global macro indicators\n"
+                "<code>/mt_forex_fx</code>      Major FX pairs rates\n"
+                "<code>/mt_commodities</code>   Gold, Oil, Gas & Metals\n\n"
                 
-                "<b>2. Analisis Sentimen AI</b>\n"
-                "<code>/mt_sentinews [SYMBOL]</code>\n"
-                "Deskripsi: Analisis sentimen berita terbaru menggunakan AI (BERT & FinBERT).\n"
-                "Contoh: <code>/mt_sentinews BBCA.JK</code>\n\n"
+                "<b>── GEO-INTELLIGENCE ──</b>\n"
+                "<code>/mt_disaster</code>      Real-time disaster alerts\n"
+                "<code>/mt_vessel_find</code>   [MMSI] Track AIS vessels\n"
+                "<code>/mt_oil_reserves</code>  Refinery utilization stats\n"
+                "<code>/mt_oil_trades</code>    Active oil trade routes\n"
+                "<code>/mt_port_traffic</code>  Logistics port density\n\n"
 
-                "<b>3. Pencarian Berita & Sentimen</b>\n"
-                "<code>/mt_news [KATA KUNCI]</code>\n"
-                "Deskripsi: Cari 10 berita terbaru (ID & EN) dengan analisis sentimen AI.\n"
-                "Contoh: <code>/mt_news IHSG</code> atau <code>/mt_news Bitcoin</code>\n\n"
-                
-                "<b>4. Analisis Teknikal Mendalam (Deep TA)</b>\n"
-                "<code>/mt_tda [METODE] [SYMBOL]</code>\n"
-                "Deskripsi: Analisis tingkat institusi dengan visualisasi canggih.\n"
-                "Metode: <code>master, regime, vdelta, spectral, smc</code>\n"
-                "Contoh: <code>/mt_tda smc BTC-USD</code>\n\n"
+                "<b>── QUANT & NEWS ──</b>\n"
+                "<code>/mt_market_update</code> [SYM] Full quant report\n"
+                "<code>/mt_sentinews</code>    [SYM] AI sentiment report\n"
+                "<code>/mt_news</code>          [KEY] Latest news feed\n"
+                "<code>/mt_ta_score</code>      [SYM] Technical TA score\n"
+                "<code>/mt_deep_ai</code>       [SYM] Deep AI prediction\n"
+                "<code>/mt_tda</code>           [MET] [SYM] Institutional TDA\n"
+                "<code>/mt_sentiment</code>     [ENT] Entity sentiment analysis\n"
+                "<code>/mt_entity_map</code>    [ENT] Corporate correlation map\n\n"
                 
                 "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-                "<i>Gunakan simbol yfinance (misal: .JK untuk IHSG, -USD untuk Crypto).</i>"
+                "<i>Use yfinance symbols (e.g. .JK for IHSG, -USD for Crypto).</i>"
             )
             self.send_message(chat_id, help_text)
         

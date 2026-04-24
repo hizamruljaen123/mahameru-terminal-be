@@ -19,11 +19,11 @@ from .bot_helpers import send_message, safe_get, _api, fmt_number
 def handle_mt_disaster(chat_id):
     data = safe_get(_api("disaster", "/api/disasters/recent"))
     if not data:
-        send_message(chat_id, "⚠️ Disaster service unavailable (port 8095)")
+        send_message(chat_id, "⚠️ Disaster service unavailable (port 8095)", auto_delete_seconds=60)
         return
     events = data.get("events", data if isinstance(data, list) else [])[:8]
     if not events:
-        send_message(chat_id, "🌿 No significant disaster events found.")
+        send_message(chat_id, "🌿 No significant disaster events found.", auto_delete_seconds=60)
         return
     rows = []
     for ev in events:
@@ -34,19 +34,20 @@ def handle_mt_disaster(chat_id):
     send_message(chat_id,
         f"🌋 <b>DISASTER INTELLIGENCE REPORT</b>\n"
         f"⏱ {datetime.now().strftime('%H:%M:%S')}\n\n"
-        f"<pre>{'chr(10)'.join(rows)}</pre>"
+        f"<pre>" + "\n".join(rows) + "</pre>",
+        auto_delete_seconds=60
     )
 
 
 # ─── /mt_vessel_find <MMSI> ───────────────────────────────────────────────────
 def handle_mt_vessel_find(chat_id, args):
     if not args:
-        send_message(chat_id, "⚠️ Usage: <code>/mt_vessel_find &lt;MMSI&gt;</code>")
+        send_message(chat_id, "⚠️ Usage: <code>/mt_vessel_find &lt;MMSI&gt;</code>", auto_delete_seconds=60)
         return
     mmsi = args[0].strip()
     data = safe_get(_api("ais", f"/api/ais/vessel/{mmsi}"))
     if not data:
-        send_message(chat_id, f"⚠️ No vessel found for MMSI: <code>{mmsi}</code>")
+        send_message(chat_id, f"⚠️ No vessel found for MMSI: <code>{mmsi}</code>", auto_delete_seconds=60)
         return
     msg = (
         f"🚢 <b>VESSEL INTELLIGENCE</b>\n\n"
@@ -69,7 +70,7 @@ def handle_mt_vessel_find(chat_id, args):
 def handle_mt_oil_reserves(chat_id):
     data = safe_get(_api("oil_refinery", "/api/oil/refineries/summary"))
     if not data:
-        send_message(chat_id, "⚠️ Oil refinery data unavailable (port 8089)")
+        send_message(chat_id, "⚠️ Oil refinery data unavailable (port 8089)", auto_delete_seconds=60)
         return
     refineries = data.get("refineries", data if isinstance(data, list) else [])[:10]
     rows = []
@@ -79,7 +80,8 @@ def handle_mt_oil_reserves(chat_id):
         util  = r.get("utilization", "?")
         rows.append(f"  {name:<25} Cap:{cap}  Util:{util}%")
     send_message(chat_id,
-        f"🛢️ <b>OIL REFINERY STATUS</b>\n\n<pre>{'chr(10)'.join(rows)}</pre>"
+        f"🛢️ <b>OIL REFINERY STATUS</b>\n\n<pre>" + "\n".join(rows) + "</pre>",
+        auto_delete_seconds=60
     )
 
 
@@ -87,7 +89,7 @@ def handle_mt_oil_reserves(chat_id):
 def handle_mt_oil_trades(chat_id):
     data = safe_get(_api("oil_trade", "/api/oil/trades/active"))
     if not data:
-        send_message(chat_id, "⚠️ Oil trade data unavailable (port 8090)")
+        send_message(chat_id, "⚠️ Oil trade data unavailable (port 8090)", auto_delete_seconds=60)
         return
     trades = data.get("trades", data if isinstance(data, list) else [])[:8]
     rows = []
@@ -97,7 +99,8 @@ def handle_mt_oil_trades(chat_id):
         grade  = t.get("grade", t.get("type", "?"))
         rows.append(f"  {route:<25} {volume} bbl  [{grade}]")
     send_message(chat_id,
-        f"🚢 <b>OIL TRADE ROUTES (ACTIVE)</b>\n\n<pre>{'chr(10)'.join(rows)}</pre>"
+        f"🚢 <b>OIL TRADE ROUTES (ACTIVE)</b>\n\n<pre>" + "\n".join(rows) + "</pre>",
+        auto_delete_seconds=60
     )
 
 
@@ -105,7 +108,7 @@ def handle_mt_oil_trades(chat_id):
 def handle_mt_port_traffic(chat_id):
     data = safe_get(_api("port", "/api/ports/traffic"))
     if not data:
-        send_message(chat_id, "⚠️ Port service unavailable (port 8098)")
+        send_message(chat_id, "⚠️ Port service unavailable (port 8098)", auto_delete_seconds=60)
         return
     ports = data.get("ports", data if isinstance(data, list) else [])[:10]
     rows = []
@@ -115,7 +118,8 @@ def handle_mt_port_traffic(chat_id):
         country = p.get("country","?")[:3].upper()
         rows.append(f"  {name:<22} [{country}]  {vessels} vessels")
     send_message(chat_id,
-        f"⚓ <b>PORT TRAFFIC INTELLIGENCE</b>\n\n<pre>{'chr(10)'.join(rows)}</pre>"
+        f"⚓ <b>PORT TRAFFIC INTELLIGENCE</b>\n\n<pre>" + "\n".join(rows) + "</pre>",
+        auto_delete_seconds=60
     )
 
 
@@ -125,11 +129,11 @@ def handle_mt_news_brief(chat_id, args):
     url = _api("news", f"/api/news/latest?q={topic}&limit=5") if topic else _api("news", "/api/news/latest?limit=5")
     data = safe_get(url)
     if not data:
-        send_message(chat_id, "⚠️ News service unavailable (port 5101)")
+        send_message(chat_id, "⚠️ News service unavailable (port 5101)", auto_delete_seconds=60)
         return
     articles = data.get("articles", data.get("data", data if isinstance(data, list) else []))[:5]
     if not articles:
-        send_message(chat_id, f"📰 No articles found{' for: ' + topic if topic else ''}.")
+        send_message(chat_id, f"📰 No articles found{' for: ' + topic if topic else ''}.", auto_delete_seconds=60)
         return
     lines = [f"📰 <b>NEWS INTELLIGENCE BRIEF</b>"]
     if topic:
@@ -140,18 +144,18 @@ def handle_mt_news_brief(chat_id, args):
         source  = art.get("source", art.get("publisher", "?"))
         cat     = art.get("category", "")
         lines.append(f"<b>{i}.</b> {title}\n     <i>{source}</i> {('| ' + cat) if cat else ''}")
-    send_message(chat_id, "\n".join(lines))
+    send_message(chat_id, "\n".join(lines), auto_delete_seconds=60)
 
 
 # ─── /mt_sentiment <entity> ───────────────────────────────────────────────────
 def handle_mt_sentiment(chat_id, args):
     if not args:
-        send_message(chat_id, "⚠️ Usage: <code>/mt_sentiment &lt;entity name&gt;</code>")
+        send_message(chat_id, "⚠️ Usage: <code>/mt_sentiment &lt;entity name&gt;</code>", auto_delete_seconds=60)
         return
     entity = " ".join(args)
     data = safe_get(_api("sentiment", f"/api/sentiment/entity?name={entity}"))
     if not data:
-        send_message(chat_id, f"⚠️ Sentiment data unavailable for: <b>{entity}</b>")
+        send_message(chat_id, f"⚠️ Sentiment data unavailable for: <b>{entity}</b>", auto_delete_seconds=60)
         return
     score    = data.get("score", data.get("sentiment_score", "N/A"))
     verdict  = data.get("verdict", data.get("label", "N/A"))
@@ -176,17 +180,18 @@ def handle_mt_sentiment(chat_id, args):
 # ─── /mt_entity_map <entity> ──────────────────────────────────────────────────
 def handle_mt_entity_map(chat_id, args):
     if not args:
-        send_message(chat_id, "⚠️ Usage: <code>/mt_entity_map &lt;entity name&gt;</code>")
+        send_message(chat_id, "⚠️ Usage: <code>/mt_entity_map &lt;entity name&gt;</code>", auto_delete_seconds=60)
         return
     entity = " ".join(args)
     data = safe_get(_api("entity", f"/api/entity/correlations?name={entity}"))
     if not data:
-        send_message(chat_id, f"⚠️ Entity data unavailable for: <b>{entity}</b>")
+        send_message(chat_id, f"⚠️ Entity data unavailable for: <b>{entity}</b>", auto_delete_seconds=60)
         return
     corrs = data.get("correlations", data if isinstance(data, list) else [])[:8]
     rows  = [f"  → {c.get('name','?'):<25} [{c.get('relation','?')}]" for c in corrs]
     send_message(chat_id,
         f"🕸️ <b>ENTITY CORRELATION MAP</b>\n"
         f"Entity: <b>{entity}</b>\n\n"
-        f"<pre>{'chr(10)'.join(rows) if rows else 'No correlations found.'}</pre>"
+        f"<pre>" + ("\n".join(rows) if rows else 'No correlations found.') + "</pre>",
+        auto_delete_seconds=60
     )
