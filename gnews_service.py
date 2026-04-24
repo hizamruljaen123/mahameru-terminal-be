@@ -8,7 +8,7 @@ import time
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/api/gnews/search')
+@app.route('/api/news/search')
 def search_gnews():
     q = request.args.get('q', '')
     lang = request.args.get('lang', 'en')
@@ -53,7 +53,7 @@ def search_gnews():
         
         # Sort by time
         news_normalized.sort(key=lambda x: x['time'], reverse=True)
-        return jsonify({"news": news_normalized})
+        return jsonify({"status": "success", "data": news_normalized})
     except Exception as e:
         print(f"GNews Service Error: {e}")
         return jsonify({"error": str(e)}), 500
