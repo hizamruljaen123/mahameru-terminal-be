@@ -50,8 +50,9 @@ socketio = SocketIO(
     app,
     cors_allowed_origins='*',
     async_mode='threading',
-    logger=False,
-    engineio_logger=False
+    logger=True,
+    engineio_logger=True,
+    always_connect=True
 )
 
 # Stats counter (in-memory)
@@ -71,18 +72,17 @@ def migrate_articles(articles, emit_realtime=True):
         emit_realtime: if True, emit socket event with new articles
     """
     if not articles:
-        return 0
+        return 0, []
 
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # --- Pre-filter: bulk check existing links in one query ---
         batch_links = [art['link'] for art in articles if art.get('link')]
         if not batch_links:
             cursor.close()
             conn.close()
-            return 0
+            return 0, []
 
         placeholders = ', '.join(['%s'] * len(batch_links))
         cursor.execute(
@@ -104,7 +104,7 @@ def migrate_articles(articles, emit_realtime=True):
             conn.close()
             with _stats_lock:
                 _stats['skipped'] += skipped
-            return 0
+            return 0, []
 
         # --- INSERT IGNORE batch ---
         sql = """
@@ -323,8 +323,22 @@ def push_articles():
             
         return jsonify({"success": True, "inserted": count})
     except Exception as e:
-        log.error(f"API_PUSH_ERROR: {e}")
+        log.error(f"API_PUSH_ERROR: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "Not Found"}), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    log.error(f"Internal Server Error: {e}", exc_info=True)
+    return jsonify({"error": "Internal Server Error"}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    log.error(f"Unhandled Exception: {e}", exc_info=True)
+    return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/backup/cleanup', methods=['POST'])
