@@ -8,7 +8,7 @@ import time
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/api/news/search')
+@app.route('/api/gnews/search')
 def search_gnews():
     q = request.args.get('q', '')
     lang = request.args.get('lang', 'en')
