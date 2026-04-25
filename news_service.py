@@ -202,6 +202,27 @@ def build_source_list(assigned_categories=None):
     return sources
 
 
+def remove_faulty_feed(source_id, reason):
+    """
+    Disable a feed source in the database if it consistently fails.
+    We set active=0 instead of DELETE to allow for manual review/recovery.
+    """
+    if not source_id:
+        return  # Skip for GNews fallback (no ID)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # id is the unique string identifier in the feedsource table
+        cursor.execute("UPDATE feedsource SET active = 0 WHERE id = %s", (source_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        log.warning(f"FEED_DISABLED: Source ID {source_id} deactivated. Reason: {reason}")
+    except Exception as e:
+        log.error(f"Failed to deactivate feed {source_id}: {e}")
+
+
 # ============================================================
 # FETCH RSS FEED (Fix: timestamp asli, retry, proper error handling)
 # ============================================================
@@ -241,6 +262,9 @@ def fetch_rss_feed(source, retry_count=2):
 
             if response.status_code != 200:
                 log.warning(f"FETCH_ERROR [{source['name']}] HTTP {response.status_code}")
+                # 403 (Forbidden) or 410 (Gone) usually means the feed is blocked or dead
+                if response.status_code in [403, 410]:
+                    remove_faulty_feed(source.get('id'), f"HTTP {response.status_code}")
                 return []
 
             feed = feedparser.parse(response.content)
@@ -308,6 +332,11 @@ def fetch_rss_feed(source, retry_count=2):
 
         except Exception as e:
             log.error(f"FETCH_EXCEPTION [{source['name']}] attempt {attempt+1}: {e}")
+            if attempt == retry_count:
+                err_msg = str(e).lower()
+                # DNS errors, Connection errors, or SSL issues after all retries
+                if any(x in err_msg for x in ['failed to resolve', 'nameresolutionerror', 'ssl', 'connection refused']):
+                    remove_faulty_feed(source.get('id'), f"Fatal Error: {e}")
             if attempt < retry_count:
                 time.sleep(2 ** attempt)
 
