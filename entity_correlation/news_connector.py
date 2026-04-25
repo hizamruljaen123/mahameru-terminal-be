@@ -1,7 +1,7 @@
 import requests
 
 class NewsConnector:
-    def __init__(self, gnews_url="http://localhost:5006"):
+    def __init__(self, gnews_url="https://api.asetpedia.online/gnews"):
         self.gnews_url = gnews_url
 
     def get_entity_news(self, query):

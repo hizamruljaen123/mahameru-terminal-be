@@ -45,7 +45,7 @@ log = logging.getLogger('backup_service')
 # ============================================================
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'asetpedia-backup-secret')
-CORS(app, origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173'), os.getenv('FRONTEND_URL_ALT', 'http://localhost:3000'), os.getenv('DASHBOARD_API_URL', 'http://localhost:8000')])
+CORS(app, origins=[os.getenv('FRONTEND_URL', 'https://terminal.asetpedia.online'), os.getenv('FRONTEND_URL_ALT', 'https://asetpedia.online'), os.getenv('DASHBOARD_API_URL', 'https://monitoring.asetpedia.online')])
 socketio = SocketIO(
     app,
     cors_allowed_origins='*',

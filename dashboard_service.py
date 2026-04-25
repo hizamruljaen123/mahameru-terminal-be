@@ -25,9 +25,9 @@ app.add_middleware(
 
 # SERVICE REGISTRY (Only for Complex Logic)
 SERVICES = {
-    "news": os.getenv('NEWS_SERVICE_URL', 'http://localhost:5101'),
-    "sentiment": os.getenv('SENTIMENT_SERVICE_URL', 'http://localhost:5008'),
-    "geo": os.getenv('GEO_DATA_API_URL', 'http://localhost:8091')
+    "news": os.getenv('NEWS_SERVICE_URL', 'https://api.asetpedia.online/news'),
+    "sentiment": os.getenv('SENTIMENT_SERVICE_URL', 'https://api.asetpedia.online/sentiment'),
+    "geo": os.getenv('GEO_DATA_API_URL', 'https://api.asetpedia.online/geo')
 }
 
 # GLOBAL MARKET CACHE (Real-time in-memory persistence)
@@ -569,7 +569,7 @@ async def get_country_news_enhanced(code: str, name: str):
         tasks = []
         for t in topics:
             query = f"{name} {t}"
-            tasks.append(client.get(f"{os.getenv('NEWS_SERVICE_URL', 'http://localhost:5101')}/api/news/search?q={query}", timeout=10.0))
+            tasks.append(client.get(f"{os.getenv('NEWS_SERVICE_URL', 'https://api.asetpedia.online/news')}/api/news/search?q={query}", timeout=10.0))
         
         responses = await asyncio.gather(*tasks)
         

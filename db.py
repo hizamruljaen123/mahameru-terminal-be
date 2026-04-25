@@ -6,7 +6,7 @@ load_dotenv()
 
 def get_db_connection():
     return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "127.0.0.1"),
+        host=os.getenv("DB_HOST", "database.asetpedia.online"),
         port=int(os.getenv("DB_PORT", 3306)),
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),

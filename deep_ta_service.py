@@ -964,7 +964,7 @@ def api_csv():
     if not os.path.exists(csv_path):
         # Generate if not exists
         import requests as req
-        req.post(f"{os.getenv('ANALYZER_API_URL', 'http://localhost:5000')}/api/dashboard-all?session_id={sid}")
+        req.post(f"{os.getenv('ANALYZER_API_URL', 'https://api.asetpedia.online/analyzer')}/api/dashboard-all?session_id={sid}")
 
     if os.path.exists(csv_path):
         return send_file(csv_path, as_attachment=True, mimetype="text/csv")

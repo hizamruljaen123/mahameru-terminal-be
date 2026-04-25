@@ -49,37 +49,37 @@ def send_message(chat_id, text, parse_mode="HTML", auto_delete_seconds=None):
         print(f"[Bot] send_message error: {e}")
     return None
 
-# ─── Port Map for Mahameru Backend Services ───────────────────────────────────
-MAHAMERU_PORTS = {
-    "crypto":       8085,
-    "crypto_stream":8092,
-    "ta":           5007,
-    "deep_ta":      5200,
-    "news":         5101,   # Node 1 (others: 5102-5105)
-    "sentiment":    5008,
-    "entity":       5005,
-    "forex":        8086,
-    "commodity":    8087,
-    "market":       8088,
-    "ais":          8080,
-    "oil_refinery": 8089,
-    "oil_trade":    8090,
-    "port":         8098,
-    "mines":        8082,
-    "disaster":     8095,
-    "geo":          8091,
-    "conflict":     8140,
-    "military":     8160,
-    "gov_facility": 8150,
-    "vessel":       8100,
-    "datacenter":   8110,
-    "infrastructure":8097,
-    "dashboard":    8000,
+# ─── Path Map for Mahameru Backend Services ───────────────────────────────────
+MAHAMERU_PATHS = {
+    "crypto":       "/crypto",
+    "crypto_stream":"/ws/crypto",
+    "ta":           "/ta",
+    "deep_ta":      "/deep-ta",
+    "news":         "/news",
+    "sentiment":    "/sentiment",
+    "entity":       "/entity",
+    "forex":        "/forex",
+    "commodity":    "/commodity",
+    "market":       "/market",
+    "ais":          "/ais",
+    "oil_refinery": "/refinery",
+    "oil_trade":    "/oil-trade",
+    "port":         "/port",
+    "mines":        "/mines",
+    "disaster":     "/disaster",
+    "geo":          "/geo",
+    "conflict":     "/conflict",
+    "military":     "/military",
+    "gov_facility": "/government",
+    "vessel":       "/vessel",
+    "datacenter":   "/datacenter",
+    "infrastructure":"/infra",
+    "dashboard":    "/dashboard",
 }
 
 def _api(service: str, path: str = ""):
-    port = MAHAMERU_PORTS.get(service, 8000)
-    return f"http://localhost:{port}{path}"
+    base_path = MAHAMERU_PATHS.get(service, f"/{service}")
+    return f"https://api.asetpedia.online{base_path}{path}"
 
 def broadcast_alert(text, parse_mode="HTML"):
     """Broadcast an auto-alert to the configured TELEGRAM_CHAT_ID."""

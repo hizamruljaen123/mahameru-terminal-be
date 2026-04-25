@@ -56,7 +56,7 @@ MAX_ARTICLES_PER_FEED = int(os.getenv('MAX_ARTICLES_PER_FEED', '30'))
 CONCURRENT_WORKERS   = int(os.getenv('CONCURRENT_FETCH_WORKERS', '8'))
 SYNC_INTERVAL_HIGH   = int(os.getenv('SYNC_INTERVAL_HIGH_PRIORITY', '300'))
 SYNC_INTERVAL_LOW    = int(os.getenv('SYNC_INTERVAL_LOW_PRIORITY', '1800'))
-BACKUP_SERVICE_URL   = os.getenv('BACKUP_SERVICE_URL', 'http://localhost:5004')
+BACKUP_SERVICE_URL   = os.getenv('BACKUP_SERVICE_URL', 'https://api.asetpedia.online/backup')
 
 # ============================================================
 # FLASK APP

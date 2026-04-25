@@ -55,7 +55,7 @@ def seed_cache():
     conn.close()
     
     print(f"--- STANDALONE SEEDING MODE ---")
-    print(f"Bypassing localhost:8092 requirement. Processing {len(hubs)} hubs directly.")
+    print(f"Bypassing real-time stream requirement. Processing {len(hubs)} hubs directly.")
     
     for hub in hubs:
         h_id, h_name, h_lat, h_lon = hub['id'], hub['name'], float(hub['lat']), float(hub['lon'])
@@ -67,21 +67,21 @@ def seed_cache():
             
             # Airport Fetch
             try:
-                res = requests.get(f"{os.getenv('INFRASTRUCTURE_API_URL', 'http://localhost:8097')}/api/infra/airports/nearby?lat={h_lat}&lon={h_lon}&radius=100", timeout=5).json()
+                res = requests.get(f"{os.getenv('INFRASTRUCTURE_API_URL', 'https://api.asetpedia.online/infra')}/api/infra/airports/nearby?lat={h_lat}&lon={h_lon}&radius=100", timeout=5).json()
                 for a in res: a['latitude'], a['longitude'] = a['latitude_deg'], a['longitude_deg']
                 logistics["airports"] = res
             except: pass
             
             # Power Plant Fetch
             try:
-                res = requests.get(f"{os.getenv('INFRASTRUCTURE_API_URL', 'http://localhost:8097')}/api/infra/power-plants/nearby?lat={h_lat}&lon={h_lon}&radius=150", timeout=5).json()
+                res = requests.get(f"{os.getenv('INFRASTRUCTURE_API_URL', 'https://api.asetpedia.online/infra')}/api/infra/power-plants/nearby?lat={h_lat}&lon={h_lon}&radius=150", timeout=5).json()
                 logistics["power_plants"] = res
             except: pass
 
             # 2. FETCH PUBLIC INFRA (OSM - Overpass is heavy, so we call infra_service)
             public_infra = []
             try:
-                osm_res = requests.get(f"{os.getenv('INFRASTRUCTURE_API_URL', 'http://localhost:8097')}/api/infra/public/search?lat={h_lat}&lon={h_lon}&radius=100000", timeout=60).json()
+                osm_res = requests.get(f"{os.getenv('INFRASTRUCTURE_API_URL', 'https://api.asetpedia.online/infra')}/api/infra/public/search?lat={h_lat}&lon={h_lon}&radius=100000", timeout=60).json()
                 raw = osm_res if isinstance(osm_res, list) else osm_res.get('elements', [])
                 for item in raw:
                     i_lat, i_lon = item.get('lat'), item.get('lon')
