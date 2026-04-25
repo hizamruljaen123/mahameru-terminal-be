@@ -239,6 +239,7 @@ class PriceIntelligenceBot:
         if not cmd_parts: return
         
         cmd = cmd_parts[0].split('@')[0]
+        args = cmd_parts[1:]
         
         if cmd == "/mt_market_update":
             if len(cmd_parts) > 1:

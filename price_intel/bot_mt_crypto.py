@@ -82,7 +82,7 @@ def handle_mt_ta_score(chat_id, args):
         for k, v in list(ma_table.items())[:6]:
             above = "↑" if v.get("above") else "↓"
             ma_rows.append(f"  {k.upper():<8} {above} {v.get('pct',0):+.2f}%")
-        msg += f"\n<b>Moving Averages:</b>\n<pre>{'chr(10)'.join(ma_rows)}</pre>"
+        msg += f"\n<b>Moving Averages:</b>\n<pre>{'\n'.join(ma_rows)}</pre>"
 
     send_message(chat_id, msg)
 
