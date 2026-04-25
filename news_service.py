@@ -551,15 +551,26 @@ def search_news():
 @app.route('/api/news/archive/<category>', methods=['GET'])
 def get_news_archive(category):
     try:
+        limit = int(request.args.get('limit', 100))
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # Use exact UPPER() match for index performance, fallback to LIKE if empty
         cursor.execute("""
             SELECT id, title, link, description, pubDate as timestamp,
                    sourceName as source, imageUrl, category, sentiment, sentimentScore, impactScore
-            FROM article WHERE UPPER(category) LIKE %s
-            ORDER BY pubDate DESC LIMIT 150
-        """, (f"%{category.upper()}%",))
+            FROM article WHERE UPPER(category) = %s
+            ORDER BY pubDate DESC LIMIT %s
+        """, (category.upper(), limit))
         items = cursor.fetchall()
+        # Fallback to LIKE if exact match returned nothing
+        if not items:
+            cursor.execute("""
+                SELECT id, title, link, description, pubDate as timestamp,
+                       sourceName as source, imageUrl, category, sentiment, sentimentScore, impactScore
+                FROM article WHERE UPPER(category) LIKE %s
+                ORDER BY pubDate DESC LIMIT %s
+            """, (f"%{category.upper()}%", limit))
+            items = cursor.fetchall()
         for item in items:
             if hasattr(item.get('timestamp'), 'timestamp'):
                 item['timestamp'] = item['timestamp'].timestamp()
@@ -571,29 +582,170 @@ def get_news_archive(category):
         return jsonify({"success": False, "error": str(e), "news": []}), 500
 
 
+@app.route('/api/news/stream-categories', methods=['GET'])
+def stream_categories():
+    """
+    SSE preload: streams DB/hot-cache data one category at a time.
+    Fast path: SQLite hot cache (sub-ms per category).
+    Slow path fallback: MySQL query if hot cache empty for that category.
+    """
+    requested = request.args.get('cats', '')
+    limit = int(request.args.get('limit', 100))
+
+    if requested:
+        categories = [c.strip().upper() for c in requested.split(',') if c.strip()]
+    else:
+        categories = [c.upper() for c in PRIORITY_CATEGORIES]
+
+    def generate():
+        # --- Fast path: read all hot cache at once ---
+        hot = cache_manager.get_hot_news()
+
+        # --- Slow path: open MySQL once for all misses ---
+        mysql_conn = None
+        mysql_cursor = None
+        try:
+            for cat in categories:
+                try:
+                    cached_items = hot.get(cat, [])
+
+                    if cached_items:
+                        # Serve directly from SQLite — instant
+                        items = cached_items[:limit]
+                    else:
+                        # Fallback: MySQL query
+                        if mysql_conn is None:
+                            mysql_conn = get_db_connection()
+                            mysql_cursor = mysql_conn.cursor(dictionary=True)
+
+                        mysql_cursor.execute("""
+                            SELECT id, title, link, description, pubDate as timestamp,
+                                   sourceName as source, imageUrl, category,
+                                   sentiment, sentimentScore, impactScore
+                            FROM article WHERE UPPER(category) = %s
+                            ORDER BY pubDate DESC LIMIT %s
+                        """, (cat, limit))
+                        items = mysql_cursor.fetchall()
+
+                        if not items:
+                            mysql_cursor.execute("""
+                                SELECT id, title, link, description, pubDate as timestamp,
+                                       sourceName as source, imageUrl, category,
+                                       sentiment, sentimentScore, impactScore
+                                FROM article WHERE UPPER(category) LIKE %s
+                                ORDER BY pubDate DESC LIMIT %s
+                            """, (f"%{cat}%", limit))
+                            items = mysql_cursor.fetchall()
+
+                        for item in items:
+                            if hasattr(item.get('timestamp'), 'timestamp'):
+                                item['timestamp'] = item['timestamp'].timestamp()
+
+                    if not items:
+                        continue  # Skip empty categories silently
+
+                    payload = json.dumps({
+                        "category": cat,
+                        "news": items,
+                        "count": len(items),
+                        "done": False,
+                        "source": "cache" if cached_items else "db"
+                    }, ensure_ascii=False, default=str)
+                    yield f"data: {payload}\n\n"
+
+                except Exception as cat_err:
+                    log.error(f"stream-categories [{cat}] error: {cat_err}")
+
+            yield f"data: {json.dumps({'done': True, 'total_categories': len(categories)})}\n\n"
+
+        except Exception as e:
+            log.error(f"stream-categories fatal: {e}")
+            yield f"data: {json.dumps({'done': True, 'error': str(e)})}\n\n"
+        finally:
+            if mysql_cursor:
+                try: mysql_cursor.close()
+                except Exception: pass
+            if mysql_conn:
+                try: mysql_conn.close()
+                except Exception: pass
+
+    resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
+    resp.headers['X-Accel-Buffering'] = 'no'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
 @app.route('/api/news/signal', methods=['GET'])
 def check_signal():
-    timeout, start = 30, time.time()
-    while time.time() - start < timeout:
-        count = cache_manager.get_new_items_count()
-        if count >= 20:
-            cache_manager.reset_new_items_count()
-            return jsonify({"signal": True, "new_count": count})
-        time.sleep(1)
-    return jsonify({"signal": False, "timeout": True})
+    """
+    Non-blocking SSE: streams a single event when new articles arrive.
+    Replaces the old blocking sleep-loop that held a Flask worker for 30s.
+    Frontend connects, receives {signal: true} when >= 20 new articles exist,
+    then disconnects and re-fetches the live stream.
+    """
+    def generate():
+        start = time.time()
+        deadline = start + 30
+        while time.time() < deadline:
+            count = cache_manager.get_new_items_count()
+            if count >= 20:
+                cache_manager.reset_new_items_count()
+                yield f"data: {json.dumps({'signal': True, 'new_count': count})}\n\n"
+                return
+            # Yield a comment (heartbeat) to keep connection alive, then wait
+            yield ": heartbeat\n\n"
+            time.sleep(2)
+        yield f"data: {json.dumps({'signal': False, 'timeout': True})}\n\n"
+
+    resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
+    resp.headers['X-Accel-Buffering'] = 'no'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
 
 
 @app.route('/stream')
 def stream():
+    """
+    Live SSE stream: pushes ONLY new articles to the frontend as they are fetched
+    from feed sources. Uses SQLite hot cache's get_new_articles_since() to detect
+    incremental changes — not full dumps on every tick.
+    Frontend receives: {"updates": {category: [articles, ...]}, "status": {...}}
+    """
     def event_stream():
+        # Track the last push time — only send articles newer than this
+        last_pushed_ts = time.time() - 120  # Start with articles from last 2 min
+        heartbeat_interval = 0  # Counter for sending heartbeats
+
         while True:
-            payload = json.dumps({
-                "news": cache_manager.get_hot_news(),
-                "status": cache_manager.get_status_cache()
-            })
-            yield f"data: {payload}\n\n"
-            time.sleep(3)
-    return Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+            try:
+                new_articles = cache_manager.get_new_articles_since(last_pushed_ts)
+                status = cache_manager.get_status_cache()
+
+                if new_articles:
+                    last_pushed_ts = time.time()
+                    payload = json.dumps({
+                        "updates": new_articles,
+                        "status": status,
+                        "ts": last_pushed_ts
+                    }, default=str)
+                    yield f"data: {payload}\n\n"
+                else:
+                    # No new articles — send heartbeat every 10s to keep connection alive
+                    heartbeat_interval += 1
+                    if heartbeat_interval >= 5:  # 5 × 2s = every 10s
+                        heartbeat_interval = 0
+                        yield f": heartbeat ts={int(time.time())}\n\n"
+
+            except Exception as e:
+                log.error(f"[/stream] error: {e}")
+                yield f": error={str(e)}\n\n"
+
+            time.sleep(2)  # Poll every 2 seconds
+
+    resp = Response(stream_with_context(event_stream()), mimetype='text/event-stream')
+    resp.headers['X-Accel-Buffering'] = 'no'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
 
 
 @app.route('/api/news/refresh', methods=['POST', 'GET'])

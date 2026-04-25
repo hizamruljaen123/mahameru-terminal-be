@@ -43,49 +43,93 @@ def init_cache():
     conn.close()
 
 def save_to_hot_cache(articles):
-    """Save latest news and increment new news counter"""
-    conn = get_cache_conn()
+    """Batch-save news articles. Single connection per call for SQLite safety."""
     import hashlib
-    
-    # Check if we were actually passed a list
-    if not isinstance(articles, list): articles = [articles]
-    
-    new_adds = 0
-    for art in articles:
-        link_hash = hashlib.sha1(art['link'].encode()).hexdigest()
-        cursor = conn.execute('''
-            INSERT OR REPLACE INTO hot_news (link_hash, category, data, timestamp)
-            VALUES (?, ?, ?, ?)
-        ''', (link_hash, art['category'], json.dumps(art), art['timestamp']))
-        
-        # If it was an insert or replace, we count it as 'new' for triggering
-        new_adds += 1
-    
-    # Increment global 'new_items_count'
-    conn.execute("UPDATE metadata SET val_int = val_int + ? WHERE id = 'new_items_count'", (new_adds,))
-    
-    # Keep only latest items
-    conn.execute('''
-        DELETE FROM hot_news WHERE link_hash NOT IN (
-            SELECT link_hash FROM hot_news ORDER BY timestamp DESC LIMIT 400
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    if not isinstance(articles, list):
+        articles = [articles]
+    if not articles:
+        return
 
-def get_hot_news():
-    """Retrieve news from fast cache"""
     conn = get_cache_conn()
-    rows = conn.execute('SELECT category, data FROM hot_news ORDER BY timestamp DESC').fetchall()
-    
-    result = {}
-    for row in rows:
-        cat = row['category']
-        if cat not in result: result[cat] = []
-        result[cat].append(json.loads(row['data']))
-    
-    conn.close()
-    return result
+    try:
+        new_adds = 0
+        for art in articles:
+            link = art.get('link', '')
+            if not link:
+                continue
+            link_hash = hashlib.sha1(link.encode()).hexdigest()
+            cat = (art.get('category') or 'UNCATEGORIZED').upper()
+            conn.execute('''
+                INSERT OR IGNORE INTO hot_news (link_hash, category, data, timestamp)
+                VALUES (?, ?, ?, ?)
+            ''', (link_hash, cat, json.dumps(art, default=str), art.get('timestamp', 0)))
+            new_adds += 1
+
+        if new_adds > 0:
+            conn.execute(
+                "UPDATE metadata SET val_int = val_int + ? WHERE id = 'new_items_count'",
+                (new_adds,)
+            )
+
+        # Per-category cap: keep latest 200 per category
+        conn.execute('''
+            DELETE FROM hot_news WHERE link_hash NOT IN (
+                SELECT link_hash FROM (
+                    SELECT link_hash,
+                           ROW_NUMBER() OVER (PARTITION BY category ORDER BY timestamp DESC) as rn
+                    FROM hot_news
+                ) ranked WHERE rn <= 200
+            )
+        ''')
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def get_hot_news(category=None):
+    """Retrieve news from fast SQLite cache. Optionally filter by category."""
+    conn = get_cache_conn()
+    try:
+        if category:
+            rows = conn.execute(
+                'SELECT category, data FROM hot_news WHERE category = ? ORDER BY timestamp DESC LIMIT 200',
+                (category.upper(),)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                'SELECT category, data FROM hot_news ORDER BY timestamp DESC LIMIT 5000'
+            ).fetchall()
+
+        result = {}
+        for row in rows:
+            cat = row['category']
+            if cat not in result:
+                result[cat] = []
+            result[cat].append(json.loads(row['data']))
+        return result
+    finally:
+        conn.close()
+
+
+def get_new_articles_since(since_ts):
+    """Return all articles inserted after the given Unix timestamp. Used for live streaming."""
+    conn = get_cache_conn()
+    try:
+        rows = conn.execute(
+            'SELECT category, data FROM hot_news WHERE timestamp > ? ORDER BY timestamp DESC LIMIT 500',
+            (since_ts,)
+        ).fetchall()
+        result = {}
+        for row in rows:
+            cat = row['category']
+            if cat not in result:
+                result[cat] = []
+            result[cat].append(json.loads(row['data']))
+        return result
+    finally:
+        conn.close()
 
 def update_status_cache(status):
     conn = get_cache_conn()
