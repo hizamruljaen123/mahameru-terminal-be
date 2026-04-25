@@ -21,6 +21,35 @@ from crypto_onchain import onchain_analyzer
 from crypto_derivatives import derivatives_analyzer
 from crypto_quant import quant_analyzer
 from crypto_macro import macro_analyzer
+import json
+
+# --- DELISTING MANAGEMENT ---
+DELISTED_SYMBOLS_PATH = os.path.join(os.path.dirname(__file__), 'data', 'delisted_symbols.json')
+
+def load_delisted_symbols():
+    if os.path.exists(DELISTED_SYMBOLS_PATH):
+        try:
+            with open(DELISTED_SYMBOLS_PATH, 'r') as f:
+                return set(json.load(f))
+        except Exception as e:
+            print(f"[DELISTED_LOAD_ERROR] {e}")
+            return set()
+    return set()
+
+def save_delisted_symbol(symbol):
+    delisted = load_delisted_symbols()
+    if symbol not in delisted:
+        delisted.add(symbol)
+        os.makedirs(os.path.dirname(DELISTED_SYMBOLS_PATH), exist_ok=True)
+        try:
+            with open(DELISTED_SYMBOLS_PATH, 'w') as f:
+                json.dump(list(delisted), f)
+            print(f"[CRYPTO_SERVICE.PY] {symbol}: added to delisted list (JSON)")
+        except Exception as e:
+            print(f"[DELISTED_SAVE_ERROR] {e}")
+
+# Global set for runtime filtering
+DELISTED_CACHE = load_delisted_symbols()
 
 class MonteCarloSimulator:
     def __init__(self, config=None):
@@ -282,7 +311,7 @@ async def fetch_top_coins_loop():
             current_symbols = []
             if METADATA_STORE:
                 sorted_meta = sorted(METADATA_STORE.items(), key=lambda x: x[1].get('market_cap', 0), reverse=True)
-                current_symbols = [k for k, v in sorted_meta[:30]] # Sync top 30 live
+                current_symbols = [k for k, v in sorted_meta[:100] if k not in DELISTED_CACHE][:35] # Top 35 active
             
             if not current_symbols:
                 current_symbols = MAJOR_CRYPTO_SYMBOLS
@@ -293,8 +322,20 @@ async def fetch_top_coins_loop():
             for i, ticker in enumerate(current_symbols):
                 try:
                     symbol_raw = ticker.replace("-USD", "")
-                    df = data[ticker] if len(current_symbols) > 1 else data
-                    if df is None or df.empty or len(df) < 2: continue
+                    
+                    if len(current_symbols) > 1:
+                        if ticker not in data.columns.get_level_values(0):
+                            continue
+                        df = data[ticker]
+                    else:
+                        df = data
+
+                    if df is None or df.empty or len(df) < 2:
+                        print(f"[CRYPTO_SERVICE.PY] {ticker}: possibly delisted; no price data found")
+                        if ticker not in MAJOR_CRYPTO_SYMBOLS:
+                            save_delisted_symbol(ticker)
+                            DELISTED_CACHE.add(ticker)
+                        continue
                     
                     last_row = df.iloc[-1]
                     price = float(last_row['Close'])
@@ -364,10 +405,13 @@ def get_cmc_list():
 
 @app.get("/api/crypto/detail/{symbol}")
 def get_coin_detail(symbol: str, period: str = "1mo"):
+    ticker_symbol = f"{symbol}-USD"
+    if ticker_symbol in DELISTED_CACHE:
+        raise HTTPException(status_code=404, detail=f"Symbol {symbol} is delisted or unavailable.")
+        
     cached = get_detail_cache(symbol)
     if cached: return cached
-
-    ticker_symbol = f"{symbol}-USD"
+    
     ticker = yf.Ticker(ticker_symbol)
     
     range_limit_map = {
