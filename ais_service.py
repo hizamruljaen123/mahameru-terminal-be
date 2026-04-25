@@ -281,6 +281,47 @@ def get_live_ships():
         "ships": list(ships_cache.values())
     }
 
+@app.get("/api/ais/anomalies")
+def get_ais_anomalies():
+    """
+    Detects vessels with unusual status or behaviors:
+    - Status: Aground, Not Under Command, Restricted Maneuverability
+    - High Speed for non-fast vessels
+    - Unusual ROT (Rate of Turn)
+    """
+    anomalies = []
+    for mmsi, ship in list(ships_cache.items()):
+        reasons = []
+        status = ship.get("status", "Unknown")
+        speed = ship.get("speed", 0)
+        v_type = ship.get("type", "Unknown")
+        rot = ship.get("rot", 0)
+
+        # 1. Critical Status
+        if status in ["Aground", "Not Under Command", "Restricted Maneuverability"]:
+            reasons.append(f"Critical Status: {status}")
+        
+        # 2. Speed Anomaly (e.g., Fishing boat > 25 knots)
+        if "Fishing" in v_type and speed > 25:
+            reasons.append(f"High Speed for Fishing Vessel: {speed} knots")
+        elif "Cargo" in v_type and speed > 35:
+            reasons.append(f"High Speed for Cargo: {speed} knots")
+        
+        # 3. ROT Anomaly
+        if abs(rot) > 700: # Very sharp turn/spinning
+            reasons.append(f"Excessive Rate of Turn: {rot}")
+
+        if reasons:
+            anomaly_data = ship.copy()
+            anomaly_data["anomaly_reasons"] = reasons
+            anomalies.append(anomaly_data)
+            
+    return {
+        "status": "success",
+        "count": len(anomalies),
+        "data": anomalies
+    }
+
 @app.get("/api/proximity/vessels")
 async def get_nearby_vessels(
     lat: float = Query(..., description="Center Latitude"),

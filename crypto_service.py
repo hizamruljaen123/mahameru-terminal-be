@@ -389,6 +389,33 @@ def get_top_coins(top: int = 100):
     # If cache empty, return empty list (loop will fill it)
     return clean_nans({"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": False})
 
+@app.get("/api/crypto/summary")
+def get_crypto_summary():
+    """Returns a market summary based on current cache"""
+    coins = CRYPTO_CACHE.get("top_coins", [])
+    if not coins:
+        return {"status": "error", "message": "No data available"}
+    
+    # Sort for gainers/losers
+    sorted_by_change = sorted(coins, key=lambda x: x.get('change_24h', 0), reverse=True)
+    
+    top_gainers = sorted_by_change[:5]
+    top_losers = sorted_by_change[-5:][::-1]
+    
+    total_market_cap = sum(c.get('market_cap', 0) for c in coins)
+    
+    return clean_nans({
+        "status": "success",
+        "market_overview": {
+            "total_market_cap_usd": total_market_cap,
+            "asset_count": len(coins),
+            "top_gainers": top_gainers,
+            "top_losers": top_losers,
+            "btc_dominance": next((c['market_cap']/total_market_cap*100 for c in coins if c['symbol'] == 'BTC'), 0) if total_market_cap > 0 else 0
+        },
+        "last_updated": CRYPTO_CACHE.get("last_updated")
+    })
+
 @app.get("/api/crypto/cmc/list")
 def get_cmc_list():
     """Returns the full top 100 list from CMC cache"""
