@@ -58,8 +58,10 @@ def get_vessel_type(code):
 def get_nav_status(code):
     return NAV_STATUS.get(code, "Unknown")
 
-# Updated API Key from User
-AIS_API_KEY = os.getenv("AIS_API_KEY", "d4764a763a57c99a2cc62f3562c0ef6a4b4043de")
+# Updated API Key from environment
+AIS_API_KEY = os.getenv("AIS_API_KEY")
+if not AIS_API_KEY:
+    raise ValueError("AIS_API_KEY environment variable not set. Add to .env file.")
 
 def archive_ship_to_db(ship):
     """Saves vessel state to MySQL for historical audit."""
