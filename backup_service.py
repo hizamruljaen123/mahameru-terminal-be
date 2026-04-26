@@ -49,9 +49,11 @@ CORS(app, origins=[os.getenv('FRONTEND_URL', 'https://terminal.asetpedia.online'
 socketio = SocketIO(
     app,
     cors_allowed_origins='*',
-    async_mode='threading',
-    logger=False,
-    engineio_logger=False,
+    async_mode=None, # Auto-detect (eventlet, gevent, or threading)
+    logger=True,
+    engineio_logger=True,
+    ping_timeout=60,
+    ping_interval=25,
     always_connect=True
 )
 
