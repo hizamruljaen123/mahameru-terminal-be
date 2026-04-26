@@ -234,7 +234,7 @@ async def background_port_intelligence_task():
     """Periodically updates port intelligence."""
     while True:
         await update_port_intelligence()
-        await asyncio.sleep(30) # Refresh every 30 seconds
+        await asyncio.sleep(5) # Refresh every 5 seconds for high responsiveness
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -433,8 +433,8 @@ async def update_port_intelligence():
                 s_lon = s.get('lon')
                 if s_lat is None or s_lon is None: continue
                 
-                # Fast distance check (approx 2km)
-                if abs(s_lat - p_lat) < 0.02 and abs(s_lon - p_lon) < 0.02:
+                # Fast distance check (approx 5km)
+                if abs(s_lat - p_lat) < 0.05 and abs(s_lon - p_lon) < 0.05:
                     vessels_at_port.append({
                         "mmsi": s.get("mmsi"),
                         "name": s.get("name")
