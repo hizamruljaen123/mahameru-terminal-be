@@ -634,59 +634,6 @@ async def root():
     return {"status": "online", "service": "geo_data_service"}
 
 
-@app.get("/api/territories")
-async def get_territories():
-    """
-    Returns country list with CALCULATED bounding boxes.
-    Bounding boxes are derived from the spread of Airports in the database
-    to dynamically determine territory range without hardcoding.
-    """
-    from db_utils import execute_query
-    try:
-        # 1. Get base countries
-        countries_query = "SELECT code, name, lat, lon FROM countries WHERE code IS NOT NULL"
-        countries = execute_query(countries_query)
-        
-        # 2. Calculate bounds from Airports (as a robust proxy for country extent)
-        bounds_query = """
-            SELECT iso_country as code, 
-                   MIN(latitude_deg) as min_lat, MIN(longitude_deg) as min_lon,
-                   MAX(latitude_deg) as max_lat, MAX(longitude_deg) as max_lon
-            FROM airports
-            GROUP BY iso_country
-        """
-        bounds_rows = execute_query(bounds_query)
-        # Add null check for airport country codes
-        bounds_map = {r['code'].upper(): r for r in bounds_rows if r.get('code')}
-        
-        # 3. Merge and fallback to center point +/- 5 degrees if no airports found
-        results = []
-        for c in countries:
-            if not c.get('code'):
-                continue
-                
-            code = c['code'].upper()
-            # Handle potential 2/3 letter mismatch (Airports usually use 2-letter ISO)
-            b = bounds_map.get(code)
-            
-            if b:
-                c['bounds'] = [
-                    float(b['min_lat']), float(b['min_lon']), 
-                    float(b['max_lat']), float(b['max_lon'])
-                ]
-            else:
-                # Fallback calculation if no POIs found (approx 500km box)
-                lat = float(c['lat']) if c['lat'] else 0
-                lon = float(c['lon']) if c['lon'] else 0
-                c['bounds'] = [lat - 5, lon - 5, lat + 5, lon + 5]
-            
-            results.append(c)
-            
-        return {"status": "success", "data": results}
-    except Exception as e:
-        print(f"[GEO_TERRITORIES_ERROR] {e}")
-        return {"status": "error", "message": str(e)}
-
 @app.get("/api/timezone-map")
 async def get_timezone_map():
     """

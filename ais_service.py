@@ -79,7 +79,6 @@ def archive_ship_to_db(ship):
 
 # In-memory storage for ship tracking
 ships_cache = {}
-active_ports_cache = []
 msg_count = 0
 is_connected = False
 connected_clients: List[Dict[str, Any]] = []
@@ -204,21 +203,9 @@ async def connect_ais_stream():
                             for client_obj in connected_clients[:]:
                                 try:
                                     bbox = client_obj.get("bbox")
-                                    if bbox and isinstance(bbox, (list, tuple)):
-                                        try:
-                                            # Handle both formats: [[minLat, minLon], [maxLat, maxLon]] OR [minLon, minLat, maxLon, maxLat]
-                                            if len(bbox) >= 2 and isinstance(bbox[0], (list, tuple)):
-                                                la_min, lo_min = bbox[0]
-                                                la_max, lo_max = bbox[1]
-                                            elif len(bbox) == 4:
-                                                lo_min, la_min, lo_max, la_max = bbox
-                                            else:
-                                                raise ValueError("Invalid bbox format")
-                                            
-                                            if not (la_min <= lat <= la_max and lo_min <= lon <= lo_max):
-                                                continue
-                                        except (IndexError, TypeError, ValueError):
-                                            pass
+                                    if bbox:
+                                        if not (bbox[0][0] <= lat <= bbox[1][0] and bbox[0][1] <= lon <= bbox[1][1]):
+                                            continue
                                     await client_obj["ws"].send_text(payload)
                                 except:
                                     if client_obj in connected_clients:
@@ -242,19 +229,11 @@ async def connect_ais_stream():
             print(f"[AIS-STREAM] Unexpected Error: {e}")
             await asyncio.sleep(10)
 
-async def background_port_intelligence_task():
-    """Periodically updates port intelligence."""
-    while True:
-        await update_port_intelligence()
-        await asyncio.sleep(5) # Refresh every 5 seconds for high responsiveness
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ais_task = asyncio.create_task(connect_ais_stream())
-    intel_task = asyncio.create_task(background_port_intelligence_task())
+    task = asyncio.create_task(connect_ais_stream())
     yield
-    ais_task.cancel()
-    intel_task.cancel()
+    task.cancel()
 
 app = FastAPI(debug=True, title="AIS Naval Microservice", lifespan=lifespan)
 
@@ -265,23 +244,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.websocket("/ws/port-intelligence")
-@app.websocket("/ais/ws/port-intelligence")
-async def websocket_port_intel(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        while True:
-            await websocket.send_json({
-                "type": "PORT_UPDATE",
-                "status": "success",
-                "data": active_ports_cache
-            })
-            await asyncio.sleep(5)
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        print(f"[PORT_INTEL_WS_ERROR] {e}")
 
 @app.websocket("/ws/ships")
 @app.websocket("/ais/ws/ships")
@@ -297,25 +259,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 bbox = msg.get("bbox")
                 client_data["bbox"] = bbox
                 filtered_cache = []
-                if bbox and isinstance(bbox, (list, tuple)):
-                    try:
-                        # Normalize bbox
-                        if len(bbox) >= 2 and isinstance(bbox[0], (list, tuple)):
-                            la_min, lo_min = bbox[0]
-                            la_max, lo_max = bbox[1]
-                        elif len(bbox) == 4:
-                            lo_min, la_min, lo_max, la_max = bbox
-                        else:
-                            raise ValueError("Invalid bbox")
-
-                        for s in list(ships_cache.values()):
-                            s_lat = s.get("lat")
-                            s_lon = s.get("lon")
-                            if s_lat is not None and s_lon is not None:
-                                if la_min <= s_lat <= la_max and lo_min <= s_lon <= lo_max:
-                                    filtered_cache.append(s)
-                    except (IndexError, TypeError, ValueError):
-                        filtered_cache = list(ships_cache.values())
+                if bbox:
+                    for s in list(ships_cache.values()):
+                        if bbox[0][0] <= s["lat"] <= bbox[1][0] and bbox[0][1] <= s["lon"] <= bbox[1][1]:
+                            filtered_cache.append(s)
                 else:
                     filtered_cache = list(ships_cache.values())
                 await websocket.send_text(json.dumps({"type": "initial", "data": filtered_cache}))
@@ -425,77 +372,6 @@ async def get_nearby_vessels(
         "count": len(nearby_vessels),
         "data": nearby_vessels
     }
-
-# ============================================================
-# PORT INTELLIGENCE (SQL MATCHING)
-# ============================================================
-
-async def update_port_intelligence():
-    """
-    Correlates live ships_cache with wpi_import ports.
-    Runs periodically to identify ports with active vessel presence.
-    """
-    global active_ports_cache
-    try:
-        # Fetch ports from database
-        sql = "SELECT world_port_index_number as id, main_port_name as name, latitude, longitude, wpi_country_code FROM wpi_import WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
-        ports = execute_query(sql)
-        
-        current_ships = list(ships_cache.values())
-        if not current_ships or not ports:
-            active_ports_cache = []
-            return
-
-        active_map = {}
-        
-        # Performance optimization: Pre-filter ships that have valid coordinates
-        valid_ships = [s for s in current_ships if s.get('lat') is not None and s.get('lon') is not None]
-
-        for p in ports:
-            try:
-                p_lat = float(p['latitude'])
-                p_lon = float(p['longitude'])
-                
-                vessels_at_port = []
-                for s in valid_ships:
-                    s_lat = s['lat']
-                    s_lon = s['lon']
-                    
-                    # Proximity check (approx 5km radius)
-                    # Using a simple box check first for speed
-                    if abs(s_lat - p_lat) < 0.05 and abs(s_lon - p_lon) < 0.05:
-                        vessels_at_port.append({
-                            "mmsi": s.get("mmsi"),
-                            "name": s.get("name"),
-                            "type": s.get("type"),
-                            "status": s.get("status")
-                        })
-                
-                if vessels_at_port:
-                    active_map[p['id']] = {
-                        "id": p['id'],
-                        "name": p['name'],
-                        "latitude": p_lat,
-                        "longitude": p_lon,
-                        "country": p['wpi_country_code'],
-                        "vessel_count": len(vessels_at_port),
-                        "vessels": vessels_at_port
-                    }
-            except (ValueError, TypeError):
-                continue
-        
-        active_ports_cache = list(active_map.values())
-        print(f"[PORT_INTEL] {len(active_ports_cache)} active ports identified via SQL-Memory correlation.")
-    except Exception as e:
-        print(f"[PORT_INTEL_ERROR] {e}")
-
-@app.get("/api/intelligence/active-ports")
-async def get_active_ports(country: str = None):
-    """Returns ports with detected vessels."""
-    data = active_ports_cache
-    if country:
-        data = [p for p in data if p['country'] == country]
-    return {"status": "success", "data": data}
 
 @app.get("/")
 @app.get("/ais")
