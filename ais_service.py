@@ -203,6 +203,7 @@ async def connect_ais_stream():
                             payload = json.dumps({"type": "update", "data": ship_data})
                             for client_obj in connected_clients[:]:
                                 try:
+                                    bbox = client_obj.get("bbox")
                                     if bbox:
                                         try:
                                             # Handle both formats: [[minLat, minLon], [maxLat, maxLon]] OR [minLon, minLat, maxLon, maxLat]
