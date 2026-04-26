@@ -293,40 +293,5 @@ def get_zone_pois():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/industrial/summary', methods=['GET'])
-def get_industrial_summary():
-    try:
-        import time
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        # Get total count
-        cursor.execute("SELECT COUNT(*) as total FROM industrial_zones")
-        total = cursor.fetchone()['total']
-        
-        # Get average utilization (using a realistic placeholder if column doesn't exist)
-        # Check columns for utilization
-        cursor.execute("DESCRIBE industrial_zones")
-        columns = [col[0] for col in cursor.fetchall()]
-        
-        utilization = 88.4 # Fallback
-        if 'utilization' in columns:
-            cursor.execute("SELECT AVG(utilization) as avg_util FROM industrial_zones WHERE utilization IS NOT NULL")
-            res = cursor.fetchone()
-            if res and res['avg_util']: 
-                utilization = float(res['avg_util'])
-
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "total_zones": total,
-            "avg_utilization": utilization,
-            "status": "OPERATIONAL",
-            "timestamp": time.time()
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8094, debug=True)
