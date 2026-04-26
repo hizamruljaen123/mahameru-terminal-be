@@ -269,6 +269,61 @@ def get_all_summaries():
     finally:
         conn.close()
 
+@app.get("/api/sentiment/policy-divergence")
+def get_policy_divergence():
+    """Analyze Hawkish vs Dovish sentiment for Central Banks."""
+    conn = get_db_connection()
+    try:
+        query = """
+        SELECT a.sentiment, a.title, a.description, a.pubDate 
+        FROM article a
+        WHERE (a.title LIKE '%Fed%' OR a.title LIKE '%Powell%' OR a.title LIKE '%ECB%' OR a.title LIKE '%Lagarde%' OR a.title LIKE '%Bank Indonesia%' OR a.title LIKE '%Perry Warjiyo%')
+        AND a.sentiment IS NOT NULL
+        ORDER BY a.pubDate DESC
+        LIMIT 200
+        """
+        df = pd.read_sql(query, conn)
+        
+        results = {"FED": {"hawkish": 0, "dovish": 0, "neutral": 0}, 
+                   "ECB": {"hawkish": 0, "dovish": 0, "neutral": 0}, 
+                   "BI": {"hawkish": 0, "dovish": 0, "neutral": 0}}
+        
+        for _, row in df.iterrows():
+            t = str(row['title']).lower()
+            d = str(row['description']).lower()
+            s = row['sentiment']
+            
+            cb = None
+            if "fed" in t or "powell" in t: cb = "FED"
+            elif "ecb" in t or "lagarde" in t: cb = "ECB"
+            elif "bank indonesia" in t or "perry" in t: cb = "BI"
+            
+            if cb:
+                if "hike" in t or "hike" in d or "hawkish" in t or "hawkish" in d or s == "POSITIVE":
+                    results[cb]["hawkish"] += 1
+                elif "cut" in t or "cut" in d or "dovish" in t or "dovish" in d or s == "NEGATIVE":
+                    results[cb]["dovish"] += 1
+                else:
+                    results[cb]["neutral"] += 1
+        
+        formatted = []
+        for bank, data in results.items():
+            total = sum(data.values())
+            if total == 0: total = 1
+            formatted.append({
+                "bank": bank,
+                "hawkish_pct": round((data["hawkish"] / total) * 100, 2),
+                "dovish_pct": round((data["dovish"] / total) * 100, 2),
+                "neutral_pct": round((data["neutral"] / total) * 100, 2),
+                "total_articles": total
+            })
+            
+        return {"status": "success", "data": formatted}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 @app.get("/api/sentiment/research")
 def research_sentiment(keyword: str):
     try:

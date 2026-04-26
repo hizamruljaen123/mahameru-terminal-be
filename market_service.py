@@ -341,6 +341,68 @@ async def get_correlation(req: CorrelationRequest):
         log.error(f"CORRELATION error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/market/var")
+async def calculate_var(req: CorrelationRequest):
+    """Calculate Value at Risk (VaR) and Expected Shortfall for a portfolio."""
+    symbols = req.symbols
+    if not symbols:
+        raise HTTPException(status_code=400, detail="Minimum 1 symbol required")
+        
+    try:
+        loop = asyncio.get_event_loop()
+        futures = [loop.run_in_executor(_MARKET_EXEC, _fetch_returns, s, req.window) for s in symbols]
+        series_list = await asyncio.gather(*futures, return_exceptions=True)
+
+        price_dict = {}
+        for s, series in zip(symbols, series_list):
+            if isinstance(series, pd.Series) and len(series) >= 20: 
+                price_dict[s] = series
+
+        if not price_dict:
+            return {"status": "error", "detail": "Insufficient historical data for VaR calculation"}
+
+        df = pd.DataFrame(price_dict).dropna(how="all").fillna(0)
+        
+        # Assume equal weight portfolio
+        weights = np.array([1/len(price_dict)] * len(price_dict))
+        
+        # Portfolio historical returns
+        port_returns = df.dot(weights)
+        
+        # Historical VaR (95% confidence)
+        var_95 = np.percentile(port_returns, 5) * 100
+        var_99 = np.percentile(port_returns, 1) * 100
+        
+        # Expected Shortfall (CVaR)
+        cvar_95 = port_returns[port_returns <= (var_95/100)].mean() * 100
+        if pd.isna(cvar_95): cvar_95 = 0.0
+        
+        # Volatility (Annualized)
+        volatility = port_returns.std() * np.sqrt(252) * 100
+        
+        # Max Drawdown
+        cum_returns = (1 + port_returns).cumprod()
+        rolling_max = cum_returns.cummax()
+        drawdown = (cum_returns - rolling_max) / rolling_max
+        max_drawdown = drawdown.min() * 100
+
+        return {
+            "status": "success",
+            "symbols": list(price_dict.keys()),
+            "metrics": {
+                "var_95_pct": round(float(var_95), 2),
+                "var_99_pct": round(float(var_99), 2),
+                "expected_shortfall_95_pct": round(float(cvar_95), 2),
+                "volatility_annualized_pct": round(float(volatility), 2),
+                "max_drawdown_pct": round(float(max_drawdown), 2)
+            },
+            "window": req.window,
+            "data_points": len(df)
+        }
+    except Exception as e:
+        log.error(f"VAR error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CORPORATE EVENT ENGINE (Earnings & Dividends)
 # ─────────────────────────────────────────────────────────────────────────────
