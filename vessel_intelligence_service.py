@@ -4,7 +4,7 @@ import json
 import asyncio
 from fastapi import FastAPI, HTTPException, Query, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthenticationCredentials
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -59,7 +59,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # SECURITY: Authentication
 security = HTTPBearer()
 
-async def verify_token(credentials: HTTPAuthenticationCredentials = Depends(security)) -> str:
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """Verify API token from Authorization header"""
     if credentials.credentials != API_TOKEN:
         logger.warning(f"Invalid token attempt")
