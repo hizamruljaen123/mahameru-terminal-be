@@ -203,10 +203,19 @@ async def connect_ais_stream():
                             payload = json.dumps({"type": "update", "data": ship_data})
                             for client_obj in connected_clients[:]:
                                 try:
-                                    bbox = client_obj.get("bbox")
                                     if bbox:
-                                        if not (bbox[0][0] <= lat <= bbox[1][0] and bbox[0][1] <= lon <= bbox[1][1]):
-                                            continue
+                                        try:
+                                            # Handle both formats: [[minLat, minLon], [maxLat, maxLon]] OR [minLon, minLat, maxLon, maxLat]
+                                            if isinstance(bbox[0], list):
+                                                la_min, lo_min = bbox[0]
+                                                la_max, lo_max = bbox[1]
+                                            else:
+                                                lo_min, la_min, lo_max, la_max = bbox
+                                            
+                                            if not (la_min <= lat <= la_max and lo_min <= lon <= lo_max):
+                                                continue
+                                        except (IndexError, TypeError, ValueError):
+                                            pass
                                     await client_obj["ws"].send_text(payload)
                                 except:
                                     if client_obj in connected_clients:
@@ -286,9 +295,22 @@ async def websocket_endpoint(websocket: WebSocket):
                 client_data["bbox"] = bbox
                 filtered_cache = []
                 if bbox:
-                    for s in list(ships_cache.values()):
-                        if bbox[0][0] <= s["lat"] <= bbox[1][0] and bbox[0][1] <= s["lon"] <= bbox[1][1]:
-                            filtered_cache.append(s)
+                    try:
+                        # Normalize bbox
+                        if isinstance(bbox[0], list):
+                            la_min, lo_min = bbox[0]
+                            la_max, lo_max = bbox[1]
+                        else:
+                            lo_min, la_min, lo_max, la_max = bbox
+
+                        for s in list(ships_cache.values()):
+                            s_lat = s.get("lat")
+                            s_lon = s.get("lon")
+                            if s_lat is not None and s_lon is not None:
+                                if la_min <= s_lat <= la_max and lo_min <= s_lon <= lo_max:
+                                    filtered_cache.append(s)
+                    except (IndexError, TypeError, ValueError):
+                        filtered_cache = list(ships_cache.values())
                 else:
                     filtered_cache = list(ships_cache.values())
                 await websocket.send_text(json.dumps({"type": "initial", "data": filtered_cache}))

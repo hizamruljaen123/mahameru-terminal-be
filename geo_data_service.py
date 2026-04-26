@@ -63,7 +63,6 @@ def cached_get(url: str, ttl_seconds: int = 300, timeout: int = 30):
 # ============================================================
 
 @app.get("/api/weather/forecast")
-@app.get("/geo/api/weather/forecast")
 async def weather_forecast(
     lat: float = Query(...),
     lng: float = Query(...),
@@ -125,7 +124,6 @@ async def weather_search_city(
 # ============================================================
 
 @app.get("/api/country/{code}")
-@app.get("/geo/api/country/{code}")
 async def country_details(code: str):
     """Fetch country details from RestCountries API."""
     url = f"https://restcountries.com/v3.1/alpha/{code}"
@@ -135,7 +133,6 @@ async def country_details(code: str):
     return data
 
 @app.get("/api/countries/lite")
-@app.get("/geo/api/countries/lite")
 async def get_countries_lite():
     """Retrieve full country registry for orbital proximity lookups."""
     from db_utils import execute_query
@@ -149,7 +146,6 @@ async def get_countries_lite():
         return {"status": "error", "message": str(e), "data": []}
 
 @app.get("/api/countries/in-range")
-@app.get("/geo/api/countries/in-range")
 async def get_countries_in_range(
     lat: float = Query(...),
     lon: float = Query(...),
@@ -467,7 +463,6 @@ async def geo_trending(category: str = Query(None), limit: int = 1000, today: bo
 # ============================================================
 
 @app.get("/api/db-recap")
-@app.get("/geo/api/db-recap")
 async def geo_db_recap(days: int = Query(7)):
     """
     Recaps news_cache.db to find trending countries and their top categories.
@@ -547,7 +542,6 @@ async def geo_db_recap(days: int = Query(7)):
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/archive-trends")
-@app.get("/geo/api/archive-trends")
 async def geo_archive_trends(date: str = Query(...)):
     """
     Calculates geographic trends for a specific date from MySQL 'article' table.
@@ -641,7 +635,6 @@ async def root():
 
 
 @app.get("/api/territories")
-@app.get("/geo/api/territories")
 async def get_territories():
     """
     Returns country list with CALCULATED bounding boxes.
@@ -695,7 +688,6 @@ async def get_territories():
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/timezone-map")
-@app.get("/geo/api/timezone-map")
 async def get_timezone_map():
     """
     Retrieve all countries with their current accurate times.
