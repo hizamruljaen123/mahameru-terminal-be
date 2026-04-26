@@ -663,11 +663,15 @@ async def get_territories():
             GROUP BY iso_country
         """
         bounds_rows = execute_query(bounds_query)
-        bounds_map = {r['code'].upper(): r for r in bounds_rows}
+        # Add null check for airport country codes
+        bounds_map = {r['code'].upper(): r for r in bounds_rows if r.get('code')}
         
         # 3. Merge and fallback to center point +/- 5 degrees if no airports found
         results = []
         for c in countries:
+            if not c.get('code'):
+                continue
+                
             code = c['code'].upper()
             # Handle potential 2/3 letter mismatch (Airports usually use 2-letter ISO)
             b = bounds_map.get(code)
