@@ -410,49 +410,55 @@ async def update_port_intelligence():
     """
     global active_ports_cache
     try:
-        # 1. Fetch all ports (or filter by bounding box if needed)
-        # We fetch minimal data to keep it fast
-        sql = "SELECT world_port_index_number as id, main_port_name as name, latitude, longitude, wpi_country_code FROM wpi_import WHERE latitude IS NOT NULL"
+        # Fetch ports from database
+        sql = "SELECT world_port_index_number as id, main_port_name as name, latitude, longitude, wpi_country_code FROM wpi_import WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
         ports = execute_query(sql)
         
         current_ships = list(ships_cache.values())
-        if not current_ships:
+        if not current_ships or not ports:
             active_ports_cache = []
             return
 
         active_map = {}
         
-        # 2. Match ships to ports (Radius ~2km)
+        # Performance optimization: Pre-filter ships that have valid coordinates
+        valid_ships = [s for s in current_ships if s.get('lat') is not None and s.get('lon') is not None]
+
         for p in ports:
-            p_lat = float(p['latitude'])
-            p_lon = float(p['longitude'])
-            
-            vessels_at_port = []
-            for s in current_ships:
-                s_lat = s.get('lat')
-                s_lon = s.get('lon')
-                if s_lat is None or s_lon is None: continue
+            try:
+                p_lat = float(p['latitude'])
+                p_lon = float(p['longitude'])
                 
-                # Fast distance check (approx 5km)
-                if abs(s_lat - p_lat) < 0.05 and abs(s_lon - p_lon) < 0.05:
-                    vessels_at_port.append({
-                        "mmsi": s.get("mmsi"),
-                        "name": s.get("name")
-                    })
-            
-            if vessels_at_port:
-                active_map[p['id']] = {
-                    "id": p['id'],
-                    "name": p['name'],
-                    "latitude": p_lat,
-                    "longitude": p_lon,
-                    "country": p['wpi_country_code'],
-                    "vessel_count": len(vessels_at_port),
-                    "vessels": vessels_at_port
-                }
+                vessels_at_port = []
+                for s in valid_ships:
+                    s_lat = s['lat']
+                    s_lon = s['lon']
+                    
+                    # Proximity check (approx 5km radius)
+                    # Using a simple box check first for speed
+                    if abs(s_lat - p_lat) < 0.05 and abs(s_lon - p_lon) < 0.05:
+                        vessels_at_port.append({
+                            "mmsi": s.get("mmsi"),
+                            "name": s.get("name"),
+                            "type": s.get("type"),
+                            "status": s.get("status")
+                        })
+                
+                if vessels_at_port:
+                    active_map[p['id']] = {
+                        "id": p['id'],
+                        "name": p['name'],
+                        "latitude": p_lat,
+                        "longitude": p_lon,
+                        "country": p['wpi_country_code'],
+                        "vessel_count": len(vessels_at_port),
+                        "vessels": vessels_at_port
+                    }
+            except (ValueError, TypeError):
+                continue
         
         active_ports_cache = list(active_map.values())
-        print(f"[PORT_INTEL] Detected {len(active_ports_cache)} active ports")
+        print(f"[PORT_INTEL] {len(active_ports_cache)} active ports identified via SQL-Memory correlation.")
     except Exception as e:
         print(f"[PORT_INTEL_ERROR] {e}")
 
