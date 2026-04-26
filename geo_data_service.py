@@ -132,7 +132,7 @@ async def country_details(code: str):
         return data[0]
     return data
 
-@app.get("/api/geo/countries/lite")
+@app.get("/api/countries/lite")
 async def get_countries_lite():
     """Retrieve full country registry for orbital proximity lookups."""
     from db_utils import execute_query
@@ -145,7 +145,7 @@ async def get_countries_lite():
         print(f"[GEO_COUNTRIES_LITE_ERROR] {e}")
         return {"status": "error", "message": str(e), "data": []}
 
-@app.get("/api/geo/countries/in-range")
+@app.get("/api/countries/in-range")
 async def get_countries_in_range(
     lat: float = Query(...),
     lon: float = Query(...),
@@ -391,7 +391,7 @@ async def country_intel(code: str):
 # ANALYTICS: GEOGRAPHIC TRENDING
 # ============================================================
 
-@app.get("/api/geo/trending")
+@app.get("/api/trending")
 async def geo_trending(category: str = Query(None), limit: int = 1000, today: bool = Query(True)):
     """
     ULTRA-FAST PROTOCOL (GEO):
@@ -462,7 +462,7 @@ async def geo_trending(category: str = Query(None), limit: int = 1000, today: bo
 # HEALTH CHECK
 # ============================================================
 
-@app.get("/api/geo/db-recap")
+@app.get("/api/db-recap")
 async def geo_db_recap(days: int = Query(7)):
     """
     Recaps news_cache.db to find trending countries and their top categories.
@@ -541,7 +541,7 @@ async def geo_db_recap(days: int = Query(7)):
         print(f"[GEO_RECAP_ERROR] {e}")
         return {"status": "error", "message": str(e)}
 
-@app.get("/api/geo/archive-trends")
+@app.get("/api/archive-trends")
 async def geo_archive_trends(date: str = Query(...)):
     """
     Calculates geographic trends for a specific date from MySQL 'article' table.
@@ -621,9 +621,9 @@ async def health():
             "/api/holidays/{code}",
             "/api/gdelt/{code}",
             "/api/country-intel/{code}",
-            "/api/geo/trending",
-            "/api/geo/db-recap",
-            "/api/geo/timezone-map"
+            "/api/trending",
+            "/api/db-recap",
+            "/api/timezone-map"
         ]
     }
 
@@ -634,7 +634,7 @@ async def root():
     return {"status": "online", "service": "geo_data_service"}
 
 
-@app.get("/api/geo/timezone-map")
+@app.get("/api/timezone-map")
 async def get_timezone_map():
     """
     Retrieve all countries with their current accurate times.

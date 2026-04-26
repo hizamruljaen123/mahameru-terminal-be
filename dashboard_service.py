@@ -184,7 +184,7 @@ async def get_dashboard_summary():
         ms_tasks = {
             "news": fetch_service(client, f"{SERVICES['news']}/api/news/data"),
             "sentiment": fetch_service(client, f"{SERVICES['sentiment']}/api/sentiment/summary-all"),
-            "geo": fetch_service(client, f"{SERVICES['geo']}/api/geo/db-recap?days=7")
+            "geo": fetch_service(client, f"{SERVICES['geo']}/api/db-recap?days=7")
         }
         
         market_tasks = []
@@ -262,7 +262,7 @@ async def get_dashboard_intelligence():
         ms_tasks = {
             "news": fetch_service(client, f"{SERVICES['news']}/api/news/data"),
             "sentiment": fetch_service(client, f"{SERVICES['sentiment']}/api/sentiment/summary-all"),
-            "geo": fetch_service(client, f"{SERVICES['geo']}/api/geo/db-recap?days=1")
+            "geo": fetch_service(client, f"{SERVICES['geo']}/api/db-recap?days=1")
         }
 
         # Gather DB + microservices simultaneously
