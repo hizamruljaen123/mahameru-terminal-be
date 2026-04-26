@@ -202,20 +202,21 @@ def fetch_binance_top_coins(limit=100):
         usdt_pairs = [d for d in data if d['symbol'].endswith('USDT')]
         # Sort by quoteVolume (USDT volume)
         sorted_pairs = sorted(usdt_pairs, key=lambda x: float(x['quoteVolume']), reverse=True)
-        
         normalized = []
         for i, p in enumerate(sorted_pairs[:limit]):
             symbol = p['symbol'].replace('USDT', '')
             normalized.append({
                 "cmc_rank": i + 1,
-                "name": symbol, # Binance doesn't provide full name in ticker
+                "name": symbol,
                 "symbol": symbol,
+                "price": float(p['lastPrice']),
+                "change_24h": float(p['priceChangePercent']),
                 "quote": {
                     "USD": {
                         "price": float(p['lastPrice']),
                         "percent_change_24h": float(p['priceChangePercent']),
-                        "percent_change_7d": 0.0, # Not available in 24h ticker
-                        "market_cap": 0.0, # Not available in ticker
+                        "percent_change_7d": 0.0,
+                        "market_cap": 0.0,
                         "volume_24h": float(p['quoteVolume'])
                     }
                 }
@@ -246,6 +247,8 @@ def fetch_yf_top_coins(limit=30):
                     "cmc_rank": i + 1,
                     "name": symbol,
                     "symbol": symbol,
+                    "price": last_price,
+                    "change_24h": change,
                     "quote": {
                         "USD": {
                             "price": last_price,
@@ -458,8 +461,18 @@ def get_top_coins(top: int = 100):
     if CRYPTO_CACHE["top_coins"] and (time.time() - CRYPTO_CACHE["last_updated"] < 90):
         return clean_nans({"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": True})
 
-    # If cache empty, return empty list (loop will fill it)
-    return clean_nans({"status": "success", "data": CRYPTO_CACHE["top_coins"][:top], "cached": False})
+    # If cache empty, try to get from unified logic immediately
+    unified = get_unified_list(top)
+    if unified["status"] == "success":
+        # Flatten for sidebar if needed (though get_unified_list now returns partially flattened)
+        data = unified["data"]
+        for c in data:
+            if "quote" in c and "USD" in c["quote"]:
+                if "price" not in c: c["price"] = c["quote"]["USD"]["price"]
+                if "change_24h" not in c: c["change_24h"] = c["quote"]["USD"]["percent_change_24h"]
+        return clean_nans({"status": "success", "data": data, "cached": False, "source": unified.get("source")})
+
+    return clean_nans({"status": "success", "data": [], "cached": False})
 
 @app.get("/api/crypto/summary")
 def get_crypto_summary():
