@@ -179,7 +179,7 @@ def fetch_cmc_top_coins(limit=100):
     }
 
     try:
-        response = requests.get(url, params=parameters, headers=headers)
+        response = requests.get(url, params=parameters, headers=headers, timeout=10)
         data = response.json()
         if data.get('status', {}).get('error_code') == 0:
             return data.get('data', [])
@@ -188,6 +188,78 @@ def fetch_cmc_top_coins(limit=100):
             return []
     except Exception as e:
         print(f"[CMC_EXCEPTION] {e}")
+        return []
+
+def fetch_binance_top_coins(limit=100):
+    """Fallback 1: Binance 24h Ticker API. Sorted by volume as proxy for 'top'."""
+    url = "https://api.binance.com/api/v3/ticker/24hr"
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200: return []
+        
+        data = resp.json()
+        # Filter for USDT pairs only
+        usdt_pairs = [d for d in data if d['symbol'].endswith('USDT')]
+        # Sort by quoteVolume (USDT volume)
+        sorted_pairs = sorted(usdt_pairs, key=lambda x: float(x['quoteVolume']), reverse=True)
+        
+        normalized = []
+        for i, p in enumerate(sorted_pairs[:limit]):
+            symbol = p['symbol'].replace('USDT', '')
+            normalized.append({
+                "cmc_rank": i + 1,
+                "name": symbol, # Binance doesn't provide full name in ticker
+                "symbol": symbol,
+                "quote": {
+                    "USD": {
+                        "price": float(p['lastPrice']),
+                        "percent_change_24h": float(p['priceChangePercent']),
+                        "percent_change_7d": 0.0, # Not available in 24h ticker
+                        "market_cap": 0.0, # Not available in ticker
+                        "volume_24h": float(p['quoteVolume'])
+                    }
+                }
+            })
+        return normalized
+    except Exception as e:
+        print(f"[BINANCE_FALLBACK_ERROR] {e}")
+        return []
+
+def fetch_yf_top_coins(limit=30):
+    """Fallback 2: Yahoo Finance for major symbols."""
+    normalized = []
+    # Use a subset for speed in fallback
+    symbols = MAJOR_CRYPTO_SYMBOLS[:limit]
+    try:
+        data = yf.download(symbols, period="2d", interval="1h", group_by='ticker', progress=False)
+        for i, ticker in enumerate(symbols):
+            try:
+                symbol = ticker.replace("-USD", "")
+                df = data[ticker] if len(symbols) > 1 else data
+                if df.empty: continue
+                
+                last_price = float(df['Close'].iloc[-1])
+                prev_price = float(df['Close'].iloc[0])
+                change = ((last_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
+                
+                normalized.append({
+                    "cmc_rank": i + 1,
+                    "name": symbol,
+                    "symbol": symbol,
+                    "quote": {
+                        "USD": {
+                            "price": last_price,
+                            "percent_change_24h": change,
+                            "percent_change_7d": 0.0,
+                            "market_cap": 0.0,
+                            "volume_24h": float(df['Volume'].iloc[-1])
+                        }
+                    }
+                })
+            except: continue
+        return normalized
+    except Exception as e:
+        print(f"[YF_FALLBACK_ERROR] {e}")
         return []
 
 MAJOR_CRYPTO_SYMBOLS = [
@@ -416,9 +488,31 @@ def get_crypto_summary():
         "last_updated": CRYPTO_CACHE.get("last_updated")
     })
 
+@app.get("/api/crypto/unified/list")
+def get_unified_list(limit: int = 100):
+    """Unified endpoint with CMC -> Binance -> yFinance fallback logic."""
+    # 1. Try CMC
+    data = fetch_cmc_top_coins(limit)
+    if data:
+        return {"status": "success", "source": "cmc", "data": data}
+    
+    # 2. Try Binance
+    print("[FALLBACK] CMC failed, trying Binance...")
+    data = fetch_binance_top_coins(limit)
+    if data:
+        return {"status": "success", "source": "binance", "data": data}
+    
+    # 3. Try yFinance
+    print("[FALLBACK] Binance failed, trying yFinance...")
+    data = fetch_yf_top_coins(min(limit, 30))
+    if data:
+        return {"status": "success", "source": "yfinance", "data": data}
+    
+    return {"status": "error", "message": "All data sources exhausted"}
+
 @app.get("/api/crypto/cmc/list")
 def get_cmc_list():
-    """Returns the full top 100 list from CMC cache"""
+    """Returns the full top 100 list from CMC cache (legacy support)"""
     if CRYPTO_CACHE["cmc_full"]:
         return {"status": "success", "data": CRYPTO_CACHE["cmc_full"]}
     
@@ -428,7 +522,8 @@ def get_cmc_list():
         CRYPTO_CACHE["cmc_full"] = data
         return {"status": "success", "data": data}
     
-    return {"status": "error", "message": "CMC data unavailable"}
+    # Fallback for legacy endpoint if CMC fails
+    return get_unified_list(100)
 
 @app.get("/api/crypto/detail/{symbol}")
 def get_coin_detail(symbol: str, period: str = "1mo"):
