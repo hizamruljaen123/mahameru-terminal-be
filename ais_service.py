@@ -204,14 +204,16 @@ async def connect_ais_stream():
                             for client_obj in connected_clients[:]:
                                 try:
                                     bbox = client_obj.get("bbox")
-                                    if bbox:
+                                    if bbox and isinstance(bbox, (list, tuple)):
                                         try:
                                             # Handle both formats: [[minLat, minLon], [maxLat, maxLon]] OR [minLon, minLat, maxLon, maxLat]
-                                            if isinstance(bbox[0], list):
+                                            if len(bbox) >= 2 and isinstance(bbox[0], (list, tuple)):
                                                 la_min, lo_min = bbox[0]
                                                 la_max, lo_max = bbox[1]
-                                            else:
+                                            elif len(bbox) == 4:
                                                 lo_min, la_min, lo_max, la_max = bbox
+                                            else:
+                                                raise ValueError("Invalid bbox format")
                                             
                                             if not (la_min <= lat <= la_max and lo_min <= lon <= lo_max):
                                                 continue
@@ -295,14 +297,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 bbox = msg.get("bbox")
                 client_data["bbox"] = bbox
                 filtered_cache = []
-                if bbox:
+                if bbox and isinstance(bbox, (list, tuple)):
                     try:
                         # Normalize bbox
-                        if isinstance(bbox[0], list):
+                        if len(bbox) >= 2 and isinstance(bbox[0], (list, tuple)):
                             la_min, lo_min = bbox[0]
                             la_max, lo_max = bbox[1]
-                        else:
+                        elif len(bbox) == 4:
                             lo_min, la_min, lo_max, la_max = bbox
+                        else:
+                            raise ValueError("Invalid bbox")
 
                         for s in list(ships_cache.values()):
                             s_lat = s.get("lat")
