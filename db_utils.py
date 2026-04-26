@@ -23,7 +23,7 @@ DB_NAME = os.getenv("DB_NAME")
 try:
     db_pool = pooling.MySQLConnectionPool(
         pool_name="asetpedia_pool",
-        pool_size=50,  # INCREASED from 5 to 50
+        pool_size=32,  # MAX limit is 32 for MySQL Connector/Python
         pool_reset_session=True,
         host=DB_HOST,
         port=DB_PORT,
@@ -34,7 +34,7 @@ try:
         collation='utf8mb4_unicode_ci',
         autocommit=False
     )
-    logger.info(f"[DB_UTILS] Initialized Pool (size:50) for {DB_HOST}/{DB_NAME}")
+    logger.info(f"[DB_UTILS] Initialized Pool (size:32) for {DB_HOST}/{DB_NAME}")
 except Exception as e:
     logger.error(f"[DB_UTILS] CRITICAL Error creating MySQL pool: {e}")
     db_pool = None
