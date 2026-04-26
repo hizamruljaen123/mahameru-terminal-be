@@ -246,6 +246,7 @@ app.add_middleware(
 )
 
 @app.websocket("/ws/ships")
+@app.websocket("/ais/ws/ships")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     client_data = {"ws": websocket, "bbox": None}
@@ -272,6 +273,7 @@ async def websocket_endpoint(websocket: WebSocket):
             connected_clients.remove(client_data)
 
 @app.get("/api/ships")
+@app.get("/ais/api/ships")
 def get_live_ships():
     return {
         "status": "online" if is_connected else "idle",
@@ -282,6 +284,7 @@ def get_live_ships():
     }
 
 @app.get("/api/ais/anomalies")
+@app.get("/ais/api/ais/anomalies")
 def get_ais_anomalies():
     """
     Detects vessels with unusual status or behaviors:
@@ -323,6 +326,7 @@ def get_ais_anomalies():
     }
 
 @app.get("/api/proximity/vessels")
+@app.get("/ais/api/proximity/vessels")
 async def get_nearby_vessels(
     lat: float = Query(..., description="Center Latitude"),
     lon: float = Query(..., description="Center Longitude"),
@@ -370,6 +374,7 @@ async def get_nearby_vessels(
     }
 
 @app.get("/")
+@app.get("/ais")
 async def root():
     return {"status": "online", "service": "ais_tracking_service"}
 

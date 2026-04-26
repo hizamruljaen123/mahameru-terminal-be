@@ -39,6 +39,7 @@ bot = PriceIntelligenceBot(TOKEN, CHAT_ID)
 # --- API ENDPOINTS ---
 
 @app.get("/api/price/analyze/{symbol}")
+@app.get("/price/api/price/analyze/{symbol}")
 async def get_analysis(symbol: str):
     result = PriceAnalyzer.perform_analysis(symbol)
     if result is None:
@@ -75,6 +76,7 @@ async def get_analysis(symbol: str):
     }
 
 @app.get("/api/price/chart/{symbol}")
+@app.get("/price/api/price/chart/{symbol}")
 async def get_chart(symbol: str):
     result = PriceAnalyzer.perform_analysis(symbol)
     if result is None:
@@ -85,6 +87,7 @@ async def get_chart(symbol: str):
     return StreamingResponse(chart_buf, media_type="image/png")
 
 @app.post("/api/price/report/{symbol}")
+@app.post("/price/api/price/report/{symbol}")
 async def trigger_report(symbol: str, background_tasks: BackgroundTasks):
     """Trigger a Telegram report in background"""
     background_tasks.add_task(bot.send_report, symbol, CHAT_ID)
@@ -92,6 +95,7 @@ async def trigger_report(symbol: str, background_tasks: BackgroundTasks):
 
 # --- HEALTH CHECK ---
 @app.get("/")
+@app.get("/price")
 def health():
     return {"status": "online", "service": "price_intelligence_service", "bot_running": bot.running}
 

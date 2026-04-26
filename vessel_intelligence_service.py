@@ -38,6 +38,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 # --- PHASE 4: INTELLIGENCE SIGNALS ---
 
 @app.get("/api/intelligence/anomalies")
+@app.get("/vessel/api/intelligence/anomalies")
 def get_vessel_anomalies():
     """
     Detects AIS-off (Dark Mode) or Route Deviations using historical AIS data.
@@ -86,6 +87,7 @@ def get_vessel_anomalies():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/intelligence/inventory-model")
+@app.get("/vessel/api/intelligence/inventory-model")
 def get_proxy_inventory(port_id: Optional[str] = None):
     """
     Proxy Inventory Model: Estimasi volume minyak yang sedang "on-water" masuk ke wilayah target.
@@ -123,6 +125,7 @@ def get_proxy_inventory(port_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/intelligence/signals")
+@app.get("/vessel/api/intelligence/signals")
 def get_trading_signals():
     """
     Phase 5: Automated Signal Dispatcher Logic.
@@ -174,6 +177,7 @@ def get_trading_signals():
 # --- PHASE 5: STRATEGIC REPORT DATA ---
 
 @app.get("/api/intelligence/dossier")
+@app.get("/vessel/api/intelligence/dossier")
 def get_daily_dossier():
     """
     Daily Intelligence Dossier (JSON).
