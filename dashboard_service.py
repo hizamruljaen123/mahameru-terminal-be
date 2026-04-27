@@ -104,13 +104,13 @@ def clean(val):
     return float(val)
 
 async def fetch_service(client, url, default=None):
-    """Single-attempt fetch with 3s timeout — fail fast, don't block."""
+    """Single-attempt fetch with 10s timeout — allows for complex geo-recap analysis."""
     try:
-        resp = await client.get(url, timeout=3.0)
+        resp = await client.get(url, timeout=10.0)
         if resp.status_code == 200:
             return resp.json()
-    except:
-        pass
+    except Exception as e:
+        print(f"[FETCH_SERVICE_ERROR] {url}: {e}")
     return default
 
 async def fetch_ticker_direct(symbol, metadata):
@@ -262,7 +262,7 @@ async def get_dashboard_intelligence():
         ms_tasks = {
             "news": fetch_service(client, f"{SERVICES['news']}/api/news/data"),
             "sentiment": fetch_service(client, f"{SERVICES['sentiment']}/api/sentiment/summary-all"),
-            "geo": fetch_service(client, f"{SERVICES['geo']}/api/db-recap?days=1")
+            "geo": fetch_service(client, f"{SERVICES['geo']}/api/db-recap?days=7")
         }
 
         # Gather DB + microservices simultaneously

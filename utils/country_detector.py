@@ -107,17 +107,26 @@ for country in COUNTRIES:
     for alias in country["aliases"]:
         ALIAS_MAP[alias.lower()] = country
 
+# Pre-compile the combined regex for all aliases for maximum performance
+import re
+
+# Sort aliases by length descending to ensure longer matches (e.g. "Saudi Arabia") 
+# are tried before shorter ones (e.g. "Saudi") to prevent partial matches.
+_SORTED_ALIASES = sorted(ALIAS_MAP.keys(), key=len, reverse=True)
+_COMBINED_PATTERN = re.compile(r'\b(' + '|'.join(re.escape(a) for a in _SORTED_ALIASES) + r')\b', re.IGNORECASE)
+
 def detect_countries(text):
     if not text:
         return []
         
-    lower_text = text.lower()
     found = {}
+    # Use findall on the combined pattern — much faster than looping re.search
+    matches = _COMBINED_PATTERN.findall(text)
     
-    for alias, country in ALIAS_MAP.items():
-        # Using word boundary matching
-        pattern = r'\b' + re.escape(alias) + r'\b'
-        if re.search(pattern, lower_text):
+    for match in matches:
+        match_lower = match.lower()
+        if match_lower in ALIAS_MAP:
+            country = ALIAS_MAP[match_lower]
             found[country["code"]] = country
             
     return list(found.values())
