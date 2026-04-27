@@ -119,7 +119,7 @@ def log_data_access(user_ip: str, endpoint: str, data_count: int, token_prefix: 
 
 # PHASE 4: INTELLIGENCE SIGNALS - SINGLE CANONICAL ENDPOINT
 
-@app.get("/api/v1/vessel/intelligence/anomalies")
+@app.get("/intelligence/anomalies")
 @limiter.limit("100/minute")
 async def get_vessel_anomalies(
     request: Request,
@@ -129,7 +129,6 @@ async def get_vessel_anomalies(
 ):
     """
     Detects AIS-off (Dark Mode) or Route Deviations using historical AIS data.
-    FIXED: Parameterized queries, authentication, rate limiting, UTC timestamps
     """
     client_ip = request.client.host if request.client else "unknown"
     
@@ -182,7 +181,7 @@ async def get_vessel_anomalies(
         logger.error(f"Anomaly detection error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to retrieve anomalies")
 
-@app.get("/api/v1/vessel/intelligence/inventory-model")
+@app.get("/intelligence/inventory-model")
 @limiter.limit("50/minute")
 async def get_proxy_inventory(
     request: Request,
@@ -192,7 +191,6 @@ async def get_proxy_inventory(
 ):
     """
     Proxy Inventory Model: Estimates volume of oil currently "on-water".
-    FIXED: Proper tanker classification, confidence intervals, UTC timestamps, recent data
     """
     client_ip = request.client.host if request.client else "unknown"
     
@@ -247,7 +245,7 @@ async def get_proxy_inventory(
         logger.error(f"Inventory model error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to retrieve inventory model")
 
-@app.get("/api/v1/vessel/intelligence/signals")
+@app.get("/intelligence/signals")
 @limiter.limit("50/minute")
 async def get_trading_signals(
     request: Request,
@@ -256,7 +254,6 @@ async def get_trading_signals(
 ):
     """
     Phase 5: Automated Signal Dispatcher Logic.
-    FIXED: Better error handling, confidence intervals, proper integration
     """
     client_ip = request.client.host if request.client else "unknown"
     
@@ -301,7 +298,7 @@ async def get_trading_signals(
         logger.error(f"Trading signals error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate signals")
 
-@app.get("/api/v1/vessel/intelligence/dossier")
+@app.get("/intelligence/dossier")
 @limiter.limit("20/minute")
 async def get_daily_dossier(
     request: Request,
