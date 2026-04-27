@@ -1,0 +1,48 @@
+server {
+    listen 443 ssl;
+    server_name terminal.asetpedia.online;
+
+    root /root/project/mahameru-terminal-fe/dist;
+    index index.html;
+
+    ssl_certificate /etc/letsencrypt/live/terminal.asetpedia.online/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/terminal.asetpedia.online/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+    # Security Headers
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: unpkg.com cdn.jsdelivr.net cdnjs.cloudflare.com cdn.plot.ly code.jquery.com s3.tradingview.com *.tradingview.com maps.google.com *.google.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' unpkg.com fonts.googleapis.com; img-src 'self' data: blob: https: unpkg.com cdn.jsdelivr.net *.tile.openstreetmap.org *.openstreetmap.org flagcdn.com *.coinmarketcap.com *.coingecko.com *.bnbstatic.com *.basemaps.cartocdn.com server.arcgisonline.com *.google.com *.gstatic.com *.openfreemap.org; connect-src 'self' blob: https: wss: unpkg.com https://api.asetpedia.online wss://api.asetpedia.online https://api.open-meteo.com https://router.project-osrm.org https://nominatim.openstreetmap.org https://server.arcgisonline.com https://*.basemaps.cartocdn.com https://restcountries.com https://data.bmkg.go.id https://*.openfreemap.org http://localhost:* ws://localhost:*; font-src 'self' fonts.gstatic.com; frame-src 'self' youtube.com *.youtube.com s3.tradingview.com sslecal2.investing.com *.tradingview.com maps.google.com *.google.com *.vesselfinder.com https://www.vesselfinder.com;" always;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(self), display-capture=()" always;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache Control untuk static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|otf)$ {
+        expires 1y;
+        add_header Cache-Control "public, no-transform";
+    }
+
+    # Gzip Compression
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml application/json application/javascript application/rss+xml image/svg+xml;
+}
+
+server {
+    if ($host = terminal.asetpedia.online) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80;
+    server_name terminal.asetpedia.online;
+    return 404;
+}

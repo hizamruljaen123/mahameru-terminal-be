@@ -1,0 +1,129 @@
+server {
+    listen 80;
+    server_name api.asetpedia.online;
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+
+    add_header Content-Security-Policy "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; frame-ancestors 'self';" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+    server_name api.asetpedia.online;
+    ssl_certificate /etc/letsencrypt/live/terminal.asetpedia.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/terminal.asetpedia.online/privkey.pem;
+
+    # Hapus header CORS dari backend agar tidak duplikat
+    proxy_hide_header 'Access-Control-Allow-Origin';
+    proxy_hide_header 'Access-Control-Allow-Methods';
+    proxy_hide_header 'Access-Control-Allow-Headers';
+    proxy_hide_header 'Access-Control-Allow-Credentials';
+
+    # Tambahkan header CORS tunggal dari Nginx - LOOSE
+    add_header 'Access-Control-Allow-Origin' '*' always;
+    add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS, PUT, DELETE' always;
+    add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+    add_header 'Access-Control-Allow-Credentials' 'true' always;
+
+    if ($request_method = 'OPTIONS') {
+        return 204;
+    }
+
+    # Crypto WebSocket
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8092; # Tanpa trailing slash agar meneruskan path lengkap (/ws/crypto)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_buffering off;
+        proxy_read_timeout 86400s;
+    }
+
+    # Backup & Socket.io (Combined to support both HTTP and WS)
+    location /backup/ {
+        proxy_pass http://127.0.0.1:5004/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_buffering off;
+        proxy_read_timeout 86400s;
+    }
+
+    # Standard Socket.io (Fallthrough)
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:5004/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_buffering off;
+    }
+
+    # Other API Paths
+    location /news/ { proxy_pass http://127.0.0.1:5101/; }
+    location /entity/ { proxy_pass http://127.0.0.1:5005/; }
+    location /ta/ { proxy_pass http://127.0.0.1:5007/; }
+    location /sentiment/ { proxy_pass http://127.0.0.1:5008/; }
+    location /crypto/ { proxy_pass http://127.0.0.1:8085/; }
+    location /forex/ { proxy_pass http://127.0.0.1:8086/; }
+    location /commodity/ { proxy_pass http://127.0.0.1:8087/; }
+    location /market/ { proxy_pass http://127.0.0.1:8088/; }
+    location /deep-ta/ { proxy_pass http://127.0.0.1:5200/; }
+    location /sky/ { proxy_pass http://127.0.0.1:5002/; }
+
+    location /geo/ { proxy_pass http://127.0.0.1:8091/; }
+
+    location /ais/ {
+        # Alamat backend ais_service.py (sesuaikan port jika berbeda)
+        proxy_pass http://127.0.0.1:8080/;
+        # Header Wajib untuk WebSocket
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        # Header standar lainnya
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Pengaturan Timeout agar koneksi tidak sering terputus
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    location /refinery/ { proxy_pass http://127.0.0.1:8089/; }
+    location /oil-trade/ { proxy_pass http://127.0.0.1:8090/; }
+    location /disaster/ { proxy_pass http://127.0.0.1:8095/; }
+    location /tv/ { proxy_pass http://127.0.0.1:5003/; }
+    location /infra/ { proxy_pass http://127.0.0.1:8097/; }
+    location /port/ { proxy_pass http://127.0.0.1:8098/; }
+    location /mines/ { proxy_pass http://127.0.0.1:8082/; }
+    location /power/ { proxy_pass http://127.0.0.1:8093/; }
+    location /gnews/ { proxy_pass http://127.0.0.1:5006/; }
+    location /correlation/ { proxy_pass http://127.0.0.1:8099/; }
+    location /vessel/ { proxy_pass http://127.0.0.1:8100/; }
+    location /industrial/ { proxy_pass http://127.0.0.1:8094/; }
+    location /datacenter/ { proxy_pass http://127.0.0.1:8110/; }
+    location /rail/ { proxy_pass http://127.0.0.1:8111/; }
+    location /conflict/ { proxy_pass http://127.0.0.1:8140/; }
+    location /government/ { proxy_pass http://127.0.0.1:8150/; }
+    location /military/ { proxy_pass http://127.0.0.1:8160/; }
+    location /entity-corr/ { proxy_pass http://127.0.0.1:8200/; }
+    location /dashboard/ { proxy_pass http://127.0.0.1:8000/; }
+    location /archive/ { proxy_pass http://127.0.0.1:5001/; }
+    location /analyzer/ { proxy_pass http://127.0.0.1:5000/; }
+}

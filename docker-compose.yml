@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  mahameru-be:
+    build:
+      context: .
+      dockerfile: Dockerfile.be
+    container_name: mahameru-be
+    restart: always
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    environment:
+      - DEV_MODE=False
+
+  mahameru-fe:
+    build:
+      context: ../mahameru-terminal-fe
+      dockerfile: ../mahameru-terminal-be/Dockerfile.fe
+    container_name: mahameru-fe
+    restart: always
+    ports:
+      - "5173:80"
+    # Note: FE is usually served by host Nginx in your current setup, 
+    # but having it in Docker allows for easier testing/isolation.

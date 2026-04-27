@@ -438,6 +438,38 @@ def get_combined_stats():
         print(f"=:: STATS_QUERY_ERROR: {str(e)} ::=")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/accidents")
+def get_accidents(
+    q: Optional[str] = Query(None, description="Search facility or location"),
+    limit: int = Query(100, description="Limit records"),
+    offset: int = Query(0, description="Offset records")
+):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = "SELECT * FROM oil_refinery_accidents WHERE 1=1"
+        params = []
+        
+        if q:
+            query += " AND (facility_name LIKE %s OR location LIKE %s OR operator LIKE %s)"
+            params.append(f"%{q}%")
+            params.append(f"%{q}%")
+            params.append(f"%{q}%")
+            
+        query += " ORDER BY event_date DESC LIMIT %s OFFSET %s"
+        params.append(limit)
+        params.append(offset)
+            
+        cursor.execute(query, tuple(params))
+        results = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        return {"status": "success", "data": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     print("=:: STARTING_OIL_REFINERY_SERVICE_ON_PORT_8089 ::=")
     uvicorn.run(app, host="0.0.0.0", log_level="debug", port=8089)
