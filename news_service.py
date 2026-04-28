@@ -581,25 +581,34 @@ def search_news():
 def get_news_archive(category):
     try:
         limit = int(request.args.get('limit', 100))
+        
+        # 1. Check Hot Cache First (Sub-ms performance via SQLite)
+        hot = cache_manager.get_hot_news()
+        cached_items = hot.get(category.upper(), [])
+        if cached_items:
+            return jsonify({"success": True, "category": category, "news": cached_items[:limit]})
+            
+        # 2. Fallback to DB (Query without UPPER() to avoid function evaluation & allow index use)
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        # Use exact UPPER() match for index performance, fallback to LIKE if empty
         cursor.execute("""
             SELECT id, title, link, description, pubDate as timestamp,
                    sourceName as source, imageUrl, category, sentiment, sentimentScore, impactScore
-            FROM article WHERE UPPER(category) = %s
+            FROM article WHERE category = %s
             ORDER BY pubDate DESC LIMIT %s
         """, (category.upper(), limit))
         items = cursor.fetchall()
-        # Fallback to LIKE if exact match returned nothing
+        
+        # 3. Last resort fallback to UPPER() match if empty
         if not items:
             cursor.execute("""
                 SELECT id, title, link, description, pubDate as timestamp,
                        sourceName as source, imageUrl, category, sentiment, sentimentScore, impactScore
-                FROM article WHERE UPPER(category) LIKE %s
+                FROM article WHERE UPPER(category) = %s
                 ORDER BY pubDate DESC LIMIT %s
-            """, (f"%{category.upper()}%", limit))
+            """, (category.upper(), limit))
             items = cursor.fetchall()
+            
         for item in items:
             if hasattr(item.get('timestamp'), 'timestamp'):
                 item['timestamp'] = item['timestamp'].timestamp()
