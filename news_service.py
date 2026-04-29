@@ -521,17 +521,62 @@ def update_news_cache_loop(assigned_categories=None):
 
 @app.route('/api/news/data', methods=['GET'])
 def get_current_data():
-    """Retrieve ONLY status metadata (Instant Handshake)"""
-    # We no longer return the news block here to avoid loading delays.
-    # The frontend will fetch news category-by-category.
+    """Retrieve fast status metadata AND hot category news"""
     current_status = cache_manager.get_status_cache()
     
-    # We still want to know how many new items are in the hot cache for the UI badges
+    # 1. Fast path: load category news from hot cache (SQLite sub-ms speed)
+    hot = cache_manager.get_hot_news()
+    
+    # 2. Cap articles per category to keep response payload extremely lightweight
+    categorized_news = {}
+    missing_cats = []
+    
+    for cat in PRIORITY_CATEGORIES:
+        cat_upper = cat.upper()
+        if cat_upper in hot and hot[cat_upper]:
+            categorized_news[cat_upper] = hot[cat_upper][:15]
+        else:
+            missing_cats.append(cat_upper)
+            
+    # 3. Fallback to MySQL for missing categories (Batched Query with ROW_NUMBER)
+    if missing_cats:
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            
+            placeholders = ', '.join(['%s'] * len(missing_cats))
+            query = f"""
+                SELECT * FROM (
+                    SELECT id, title, link, description, pubDate as timestamp,
+                           sourceName as source, imageUrl, category, sentiment, sentimentScore, impactScore,
+                           ROW_NUMBER() OVER (PARTITION BY category ORDER BY pubDate DESC) as rn
+                    FROM article 
+                    WHERE UPPER(category) IN ({placeholders})
+                ) t WHERE rn <= 15
+            """
+            cursor.execute(query, tuple(missing_cats))
+            rows = cursor.fetchall()
+            
+            for row in rows:
+                cat_upper = (row.get('category') or 'UNCATEGORIZED').upper()
+                if cat_upper not in categorized_news:
+                    categorized_news[cat_upper] = []
+                    
+                if hasattr(row.get('timestamp'), 'timestamp'):
+                    row['timestamp'] = row['timestamp'].timestamp()
+                    
+                categorized_news[cat_upper].append(row)
+                
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Fallback DB query in /api/news/data failed: {e}")
+        
     new_count = cache_manager.get_new_items_count()
     cache_manager.reset_new_items_count()
     
     return jsonify({
-        "news": {}, 
+        "news": categorized_news, 
         "status": current_status,
         "new_count": new_count
     })
