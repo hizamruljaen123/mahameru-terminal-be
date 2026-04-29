@@ -680,94 +680,121 @@ def _get_industry_ytd_from_ind(ind_obj, companies=None):
     return 0.0
 
 
+def _fetch_single_sector(s_key, etf_ticker):
+    try:
+        ticker = yf.Ticker(etf_ticker)
+        hist = ticker.history(period="ytd")
+        
+        s_return = 0.0
+        if len(hist) >= 2:
+            try:
+                s_return = (hist['Close'].iloc[-1] / hist['Close'].iloc[0] - 1) * 100
+            except: pass
+        
+        s_name = SECTOR_NAMES.get(s_key, s_key.title())
+        
+        # Try to get industries for this sector
+        sector_movers_pool = []
+        try:
+            sec = yf.Sector(s_key)
+            df_ind = sec.industries
+        except Exception as e:
+            log.debug(f"SECTOR_FETCH: No industry list for {s_key}: {e}")
+            df_ind = pd.DataFrame()
+        
+        industries_batch = []
+        if df_ind.empty:
+            industries_batch.append({
+                "sector": s_name,
+                "sector_return_ytd": round(float(s_return), 2),
+                "industry": "N/A",
+                "industry_return_ytd": 0.0
+            })
+        else:
+            for idx, row in df_ind.iterrows():
+                i_key = str(idx)
+                i_name = row.get('name') or row.get('industryName') or i_key.replace('-', ' ').title()
+                
+                i_return = 0.0
+                if i_key:
+                    try:
+                        ind = yf.Industry(i_key)
+                        df_p = getattr(ind, 'top_performing_companies', pd.DataFrame())
+                        i_comps = []
+                        if not df_p.empty:
+                            for sym, crow in df_p.iterrows():
+                                y = clean(crow.get('ytd return'))
+                                if y is not None:
+                                    if abs(y) < 2.0: y *= 100
+                                    c_obj = {"symbol": str(sym), "ytd_return": round(y, 2)}
+                                    i_comps.append(c_obj)
+                                    sector_movers_pool.append(c_obj)
+                        
+                        i_return = _get_industry_ytd_from_ind(ind, i_comps)
+                    except: pass
+                
+                industries_batch.append({
+                    "sector": s_name,
+                    "sector_return_ytd": round(float(s_return), 2),
+                    "industry": i_name,
+                    "industry_return_ytd": round(float(i_return), 2)
+                })
+
+        # Calculate top 3 movers/losers for this sector
+        spool = sorted([m for m in sector_movers_pool if m.get('ytd_return')], key=lambda x: x['ytd_return'], reverse=True)
+        top_m = spool[:3]
+        top_l = spool[-3:][::-1]
+
+        for item in industries_batch:
+            item["top_movers"] = top_m
+            item["top_losers"] = top_l
+            
+        return industries_batch
+    except Exception as e:
+        log.warning(f"SECTOR_FETCH Error on {s_key} ({etf_ticker}): {e}")
+        return []
+
 def _fetch_sector_report():
     """Fetch sector performance via ETFs and industry details via yfinance Sector/Industry objects."""
     report_data = []
     log.info("SECTOR_FETCH: Starting sector performance report collection")
     
+    futures = []
     for s_key, etf_ticker in SECTOR_ETF.items():
+        futures.append(_MARKET_EXEC.submit(_fetch_single_sector, s_key, etf_ticker))
+        
+    for future in futures:
         try:
-            ticker = yf.Ticker(etf_ticker)
-            hist = ticker.history(period="ytd")
-            
-            s_return = 0.0
-            if len(hist) >= 2:
-                try:
-                    s_return = (hist['Close'].iloc[-1] / hist['Close'].iloc[0] - 1) * 100
-                except: pass
-            
-            s_name = SECTOR_NAMES.get(s_key, s_key.title())
-            
-            # Try to get industries for this sector
-            sector_movers_pool = []
-            try:
-                sec = yf.Sector(s_key)
-                df_ind = sec.industries
-            except Exception as e:
-                log.debug(f"SECTOR_FETCH: No industry list for {s_key}: {e}")
-                df_ind = pd.DataFrame()
-            
-            industries_batch = []
-            if df_ind.empty:
-                industries_batch.append({
-                    "sector": s_name,
-                    "sector_return_ytd": round(float(s_return), 2),
-                    "industry": "N/A",
-                    "industry_return_ytd": 0.0
-                })
-            else:
-                for idx, row in df_ind.iterrows():
-                    # idx is the industry key (index), row contains metadata
-                    i_key = str(idx)
-                    i_name = row.get('name') or row.get('industryName') or i_key.replace('-', ' ').title()
-                    
-                    i_return = 0.0
-                    if i_key:
-                        try:
-                            ind = yf.Industry(i_key)
-                            # Fetch top companies to build sector-level movers pool
-                            df_p = getattr(ind, 'top_performing_companies', pd.DataFrame())
-                            i_comps = []
-                            if not df_p.empty:
-                                for sym, crow in df_p.iterrows():
-                                    y = clean(crow.get('ytd return'))
-                                    if y is not None:
-                                        if abs(y) < 2.0: y *= 100
-                                        c_obj = {"symbol": str(sym), "ytd_return": round(y, 2)}
-                                        i_comps.append(c_obj)
-                                        sector_movers_pool.append(c_obj)
-                            
-                            i_return = _get_industry_ytd_from_ind(ind, i_comps)
-                        except: pass
-                    
-                    industries_batch.append({
-                        "sector": s_name,
-                        "sector_return_ytd": round(float(s_return), 2),
-                        "industry": i_name,
-                        "industry_return_ytd": round(float(i_return), 2)
-                    })
-
-            # Calculate top 3 movers/losers for this sector
-            spool = sorted([m for m in sector_movers_pool if m.get('ytd_return')], key=lambda x: x['ytd_return'], reverse=True)
-            top_m = spool[:3]
-            top_l = spool[-3:][::-1]
-
-            for item in industries_batch:
-                item["top_movers"] = top_m
-                item["top_losers"] = top_l
-                report_data.append(item)
-
+            res = future.result(timeout=60)
+            if res:
+                report_data.extend(res)
         except Exception as e:
-            log.warning(f"SECTOR_FETCH Error on {s_key} ({etf_ticker}): {e}")
-    
+            log.warning(f"SECTOR_FETCH future error: {e}")
+                
     log.info(f"SECTOR_FETCH: Completed. {len(report_data)} industry records collected.")
     return report_data
 
+
+async def sector_update_loop():
+    """Background task: fetch sector performance in the background periodically."""
+    log.info("SECTOR_BG: Updater started")
+    await asyncio.sleep(5)
+    while True:
+        try:
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(_MARKET_EXEC, _fetch_sector_report)
+            if data:
+                SECTOR_CACHE["data"] = data
+                SECTOR_CACHE["last_updated"] = time.time()
+                log.info(f"SECTOR_BG: {len(data)} sector records cached")
+        except Exception as e:
+            log.error(f"SECTOR_BG loop error: {e}")
+        await asyncio.sleep(900)
+
 @app.get("/api/market/sectors")
 async def get_sector_performance(refresh: bool = False):
-    """Return sector & industry performance. Cached for 1 hour by default."""
-    now = time.time()
-    if not refresh and SECTOR_CACHE["data"] and (now - SECTOR_CACHE["last_updated"] < 3600):
+    """Return sector & industry performance. Always serves cache instantly if available."""
+    if not refresh and SECTOR_CACHE["data"]:
         return {
             "status": "success", 
             "data": SECTOR_CACHE["data"], 
@@ -780,11 +807,12 @@ async def get_sector_performance(refresh: bool = False):
         data = await loop.run_in_executor(_MARKET_EXEC, _fetch_sector_report)
         if data:
             SECTOR_CACHE["data"] = data
-            SECTOR_CACHE["last_updated"] = now
+            SECTOR_CACHE["last_updated"] = time.time()
         return {"status": "success", "data": data, "cached": False}
     except Exception as e:
         log.error(f"SECTOR_API Error: {e}")
         return {"status": "error", "message": str(e)}
+
 
 
 
@@ -965,6 +993,8 @@ def root():
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(market_update_loop())
+    asyncio.create_task(sector_update_loop())
+
 
 if __name__ == "__main__":
     print("=:: LAUNCHING ASETPEDIA INSTITUTIONAL MARKET SERVICE (Port 8088) ::= ")
