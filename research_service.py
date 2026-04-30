@@ -111,6 +111,9 @@ def get_models():
     # 1. Add Official DeepSeek models (Direct API)
     model_map["deepseek-v4-flash"] = {"id": "deepseek-v4-flash", "name": "DeepSeek V4 Flash", "provider": "DeepSeek"}
     model_map["deepseek-v4-pro"] = {"id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro", "provider": "DeepSeek"}
+    model_map["deepseek-chat"] = {"id": "deepseek-chat", "name": "DeepSeek Chat", "provider": "DeepSeek"}
+    model_map["deepseek-reasoner"] = {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner (R1)", "provider": "DeepSeek"}
+    model_map["deepseek-r1"] = {"id": "deepseek-r1", "name": "DeepSeek R1", "provider": "DeepSeek"}
     
     if api_key:
         try:
