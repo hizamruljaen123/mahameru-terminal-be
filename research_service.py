@@ -66,10 +66,13 @@ def clean_data(val):
         return None
 
 @app.route('/')
+@app.route('/research')
+@app.route('/research/')
 def index():
     return jsonify({"status": "active", "service": "Research Service API"})
 
 @app.route('/api/search', methods=['GET'])
+@app.route('/research/api/search', methods=['GET'])
 def search():
     query = request.args.get('q', '').strip()
     if not query:
@@ -78,6 +81,7 @@ def search():
     return jsonify({"status": "success", "data": results})
 
 @app.route('/api/data/fundamental', methods=['GET'])
+@app.route('/research/api/data/fundamental', methods=['GET'])
 def get_fundamental():
     symbol = request.args.get('symbol', '').strip().upper()
     try:
@@ -87,6 +91,7 @@ def get_fundamental():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/data/market', methods=['GET'])
+@app.route('/research/api/data/market', methods=['GET'])
 def get_market():
     symbol = request.args.get('symbol', '').strip().upper()
     try:
@@ -121,6 +126,7 @@ def get_market():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/data/chart', methods=['GET'])
+@app.route('/research/api/data/chart', methods=['GET'])
 def get_scalable_chart():
     symbol = request.args.get('symbol', '').strip().upper()
     period = request.args.get('period', '1y').strip()
@@ -143,6 +149,7 @@ def get_scalable_chart():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/data/news', methods=['GET'])
+@app.route('/research/api/data/news', methods=['GET'])
 def get_news():
     symbol = request.args.get('symbol', '').strip().upper()
     news_list = []
@@ -179,6 +186,7 @@ def get_news():
     return jsonify({"status": "success", "data": {"news": news_list[:10], "sentiment": sentiment_summary}})
 
 @app.route('/api/data/exec-news', methods=['GET'])
+@app.route('/research/api/data/exec-news', methods=['GET'])
 def get_exec_news():
     name = request.args.get('name', '').strip()
     if not name:
@@ -195,6 +203,7 @@ def get_exec_news():
     return jsonify({"status": "success", "data": news_list[:5]})
 
 @app.route('/api/analyze/report', methods=['POST'])
+@app.route('/research/api/analyze/report', methods=['POST'])
 def analyze_report():
     data = request.json or {}
     symbol = data.get('symbol', '').strip().upper()
