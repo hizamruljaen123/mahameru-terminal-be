@@ -23,7 +23,7 @@ def search_gnews():
         
     try:
         # Dynamic settings based on request parameters
-        google_news = GNews(language=lang, country=country, period=period, max_results=30)
+        google_news = GNews(language=lang, country=country, period=period, max_results=100)
         gn_results = google_news.get_news(q)
         
         news_normalized = []
