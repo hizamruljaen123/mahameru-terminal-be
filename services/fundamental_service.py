@@ -15,16 +15,44 @@ def clean_data(val):
         return None
 
 def fetch_wikipedia_summary(company_name):
+    """
+    Fetches a summary from Wikipedia for the given company name.
+    Uses a two-step process: search for the best matching title, then fetch the summary.
+    """
+    headers = {
+        'User-Agent': 'AsetpediaTerminal/1.0 (https://asetpedia.online; research@asetpedia.online)'
+    }
     try:
-        url = f"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exsentences=5&exlimit=1&titles={company_name}&explaintext=1&format=json&formatversion=2"
-        res = requests.get(url, timeout=5)
-        if res.status_code == 200:
-            pages = res.json().get('query', {}).get('pages', [])
-            if pages and 'extract' in pages[0]:
-                return pages[0]['extract']
-    except:
-        pass
+        # Step 1: Search for the best matching title
+        search_url = "https://en.wikipedia.org/w/api.php"
+        search_params = {
+            "action": "query",
+            "list": "search",
+            "srsearch": company_name,
+            "format": "json",
+            "srlimit": 1
+        }
+        search_res = requests.get(search_url, params=search_params, headers=headers, timeout=5)
+        
+        if search_res.status_code == 200:
+            search_data = search_res.json()
+            search_results = search_data.get('query', {}).get('search', [])
+            
+            if search_results:
+                best_title = search_results[0]['title']
+                
+                # Step 2: Fetch the summary for the found title
+                summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{best_title.replace(' ', '_')}"
+                summary_res = requests.get(summary_url, headers=headers, timeout=5)
+                
+                if summary_res.status_code == 200:
+                    summary_data = summary_res.json()
+                    return summary_data.get('extract', "Tidak ada ringkasan Wikipedia.")
+    except Exception as e:
+        print(f"Wikipedia fetch error for {company_name}: {e}")
+    
     return "Tidak ada ringkasan Wikipedia."
+
 
 def get_fundamental_data(symbol):
     ticker = yf.Ticker(symbol)

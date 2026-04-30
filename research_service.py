@@ -54,6 +54,8 @@ AVAILABLE_APIS = [
     }
 ]
 
+CAVEMAN_PROMPT = "RESPOND TERSE LIKE SMART CAVEMAN. ALL TECHNICAL SUBSTANCE STAY. ONLY FLUFF DIE. NO ARTICLES, NO FILLER, NO PLEASANTRIES, NO HEDGING. USE SENTENCE FRAGMENTS. CODE BLOCKS UNTOUCHED."
+
 def clean_data(val):
     import numpy as np
     import pandas as pd
@@ -81,6 +83,25 @@ def search():
         return jsonify({"status": "success", "data": []})
     results = search_entities(query)
     return jsonify({"status": "success", "data": results})
+
+@app.route('/api/models', methods=['GET'])
+@app.route('/research/api/models', methods=['GET'])
+def get_deepseek_models():
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        return jsonify({"status": "error", "message": "DeepSeek API Key not found"}), 500
+    try:
+        response = requests.get(
+            'https://api.deepseek.com/models',
+            headers={
+                'Accept': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            },
+            timeout=10
+        )
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/data/fundamental', methods=['GET'])
 @app.route('/research/api/data/fundamental', methods=['GET'])
@@ -264,6 +285,7 @@ def analyze_report():
     stage = int(data.get('stage', 1))
     full_data = data.get('full_data', {})
     generated_stages = data.get('generated_stages', {})
+    caveman = data.get('caveman', False)
 
     if not api_key:
         api_key = os.environ.get('DEEPSEEK_API_KEY')
@@ -284,8 +306,12 @@ def analyze_report():
         
         stage_prompt = prompts.get(stage, prompts[1])
         
+        system_msg = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
+        if caveman:
+            system_msg += f" {CAVEMAN_PROMPT}"
+            
         messages = [
-            {"role": "system", "content": "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."}
+            {"role": "system", "content": system_msg}
         ]
         
         # Inject previously written stage responses for continuity
@@ -341,6 +367,7 @@ def analyze_compare():
     model = data.get('model', 'deepseek-v4-flash').strip()
     system_prompt = data.get('system_prompt', '')
     user_prompt = data.get('user_prompt', '')
+    caveman = data.get('caveman', False)
     api_key = data.get('api_key', '').strip() or os.environ.get('DEEPSEEK_API_KEY')
 
     if not api_key:
@@ -355,8 +382,13 @@ def analyze_compare():
     def generate():
         try:
             client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            
+            sys_content = system_prompt or "You are a Senior Institutional Research Analyst at Asetpedia Intelligence."
+            if caveman:
+                sys_content += f" {CAVEMAN_PROMPT}"
+                
             messages = [
-                {"role": "system", "content": system_prompt or "You are a Senior Institutional Research Analyst at Asetpedia Intelligence."},
+                {"role": "system", "content": sys_content},
                 {"role": "user", "content": user_prompt}
             ]
             response = client.chat.completions.create(

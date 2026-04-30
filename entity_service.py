@@ -159,6 +159,45 @@ def clean_data(obj):
         return clean_data(obj.tolist())
     return obj
 
+def fetch_wikipedia_summary(company_name):
+    """
+    Fetches a summary from Wikipedia for the given company name.
+    Uses a two-step process: search for the best matching title, then fetch the summary.
+    """
+    headers = {
+        'User-Agent': 'AsetpediaTerminal/1.0 (https://asetpedia.online; research@asetpedia.online)'
+    }
+    try:
+        # Step 1: Search for the best matching title
+        search_url = "https://en.wikipedia.org/w/api.php"
+        search_params = {
+            "action": "query",
+            "list": "search",
+            "srsearch": company_name,
+            "format": "json",
+            "srlimit": 1
+        }
+        search_res = requests.get(search_url, params=search_params, headers=headers, timeout=5)
+        
+        if search_res.status_code == 200:
+            search_data = search_res.json()
+            search_results = search_data.get('query', {}).get('search', [])
+            
+            if search_results:
+                best_title = search_results[0]['title']
+                
+                # Step 2: Fetch the summary for the found title
+                summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{best_title.replace(' ', '_')}"
+                summary_res = requests.get(summary_url, headers=headers, timeout=5)
+                
+                if summary_res.status_code == 200:
+                    summary_data = summary_res.json()
+                    return summary_data.get('extract', "Tidak ada ringkasan Wikipedia.")
+    except Exception as e:
+        print(f"Wikipedia fetch error for {company_name}: {e}")
+    
+    return "Tidak ada ringkasan Wikipedia."
+
 @app.route('/api/entity/search')
 def search_entity():
     query = request.args.get('q', '')
@@ -191,7 +230,8 @@ def get_entity_profile(symbol):
             "longBusinessSummary": info.get('longBusinessSummary'),
             "website": info.get('website'),
             "city": info.get('city'),
-            "country": info.get('country')
+            "country": info.get('country'),
+            "wikipedia_summary": fetch_wikipedia_summary(info.get('longName') or info.get('shortName', symbol))
         }
 
         # Institutional & Performance Matrix
