@@ -124,9 +124,12 @@ def search():
 @app.route('/research/api/models', methods=['GET'])
 def get_models():
     api_key = os.environ.get('DEEPSEEK_API_KEY')
-    models = []
+    model_map = {}
     
-    # 1. Try to get DeepSeek models
+    # 1. Add Official DeepSeek models (Direct API)
+    model_map["deepseek-v4-flash"] = {"id": "deepseek-v4-flash", "name": "DeepSeek V4 Flash", "provider": "DeepSeek"}
+    model_map["deepseek-v4-pro"] = {"id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro", "provider": "DeepSeek"}
+    
     if api_key:
         try:
             response = requests.get(
@@ -140,14 +143,20 @@ def get_models():
             if response.status_code == 200:
                 ds_models = response.json().get('data', [])
                 for m in ds_models:
-                    models.append({"id": m['id'], "name": f"DeepSeek {m['id']}", "provider": "DeepSeek"})
+                    m_id = m['id']
+                    if m_id not in model_map:
+                        model_map[m_id] = {"id": m_id, "name": f"DeepSeek {m_id}", "provider": "DeepSeek"}
         except:
             pass
             
-    # 2. Add DIT Models
-    models.extend(DIT_MODELS)
+    # 2. Add DIT Models (Overwrite if ID matches to ensure correct provider/name)
+    for m in DIT_MODELS:
+        model_map[m['id']] = m
     
-    return jsonify({"status": "success", "data": models})
+    # Convert map to list while maintaining order (Tiers)
+    sorted_models = list(model_map.values())
+    
+    return jsonify({"status": "success", "data": sorted_models})
 
 @app.route('/api/data/fundamental', methods=['GET'])
 @app.route('/research/api/data/fundamental', methods=['GET'])
