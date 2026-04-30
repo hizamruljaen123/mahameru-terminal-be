@@ -254,7 +254,7 @@ def analyze_report():
         {json.dumps(full_data, indent=2)}
 
         Tuliskan dengan gaya bahasa profesional selayaknya riset dana lindung nilai (hedge fund).
-        PENTING: Jika menyajikan metrik dalam tabel, WAJIB gunakan format Tabel Markdown valid (`|` dan `|---|`). Gunakan hanya heading tingkat 3 atau 4 (### atau ####) untuk merinci laporan.
+        PENTING: Gunakan format penulisan normal (Proper Case / Sentence Case). DILARANG menggunakan huruf besar semua (ALL CAPS) untuk teks paragraf. Jika menyajikan metrik dalam tabel, WAJIB gunakan format Tabel Markdown valid (`|` dan `|---|`). Gunakan hanya heading tingkat 3 atau 4 (### atau ####) untuk merinci laporan.
         """
         
         messages.append({"role": "user", "content": prompt})
