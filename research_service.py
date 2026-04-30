@@ -371,21 +371,21 @@ def analyze_report():
                 yield f"data: {json.dumps({'error': 'DIT API Key not found'})}\n\n"
                 return
 
-            url = f"{DIT_API_URL}/v1/responses"
+            url = f"{DIT_API_URL}/v1/chat/completions"
             
-            # Prepare DIT-style messages
+            # Prepare OpenAI-style messages
             system_msg = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
             if caveman:
                 system_msg += f" {CAVEMAN_PROMPT}"
                 
-            dit_input = [{"role": "system", "content": [{"type": "input_text", "text": system_msg}]}]
+            messages = [{"role": "system", "content": system_msg}]
             
             # Context messages
             for s_num in range(1, stage):
                 s_key = str(s_num)
                 if s_key in generated_stages and generated_stages[s_key]:
-                    dit_input.append({"role": "user", "content": [{"type": "input_text", "text": prompts.get(s_num, "")}]})
-                    dit_input.append({"role": "assistant", "content": [{"type": "input_text", "text": generated_stages[s_key]}]})
+                    messages.append({"role": "user", "content": prompts.get(s_num, "")})
+                    messages.append({"role": "assistant", "content": generated_stages[s_key]})
             
             # Final prompt
             prompt = f"""
@@ -401,28 +401,35 @@ def analyze_report():
             Tuliskan dengan gaya bahasa profesional selayaknya riset dana lindung nilai (hedge fund).
             PENTING: Gunakan format penulisan normal (Proper Case / Sentence Case). DILARANG menggunakan huruf besar semua (ALL CAPS) untuk teks paragraf. Jika menyajikan metrik dalam tabel, WAJIB gunakan format Tabel Markdown valid (`|` dan `|---|`). Gunakan hanya heading tingkat 3 atau 4 (### atau ####) untuk merinci laporan.
             """
-            dit_input.append({"role": "user", "content": [{"type": "input_text", "text": prompt}]})
+            messages.append({"role": "user", "content": prompt})
             
             payload = {
                 "model": model,
-                "max_output_tokens": 4096,
-                "input": dit_input
+                "stream": True,
+                "temperature": 0.3,
+                "messages": messages
             }
             
             try:
                 res = requests.post(url, json=payload, headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {dit_api_key}"
-                }, timeout=60)
+                }, timeout=120, stream=True)
                 
                 if res.status_code == 200:
-                    res_json = res.json()
-                    # The user example: res_json['output'][0]['content'][0]['text']
-                    content = res_json.get('output', [{}])[0].get('content', [{}])[0].get('text', '')
-                    if content:
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                    else:
-                        yield f"data: {json.dumps({'error': 'Empty response from DIT API'})}\n\n"
+                    for line in res.iter_lines():
+                        if not line: continue
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith('data: '):
+                            data_chunk = line_str[6:]
+                            if data_chunk == '[DONE]': break
+                            try:
+                                chunk_json = json.loads(data_chunk)
+                                content = chunk_json.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                if content:
+                                    yield f"data: {json.dumps({'content': content})}\n\n"
+                            except:
+                                continue
                 else:
                     yield f"data: {json.dumps({'error': f'DIT API Error: {res.status_code} - {res.text}'})}\n\n"
             except Exception as e:
@@ -516,36 +523,44 @@ def analyze_compare():
                 yield f"data: {json.dumps({'error': 'DIT API Key not found'})}\n\n"
                 return
 
-            url = f"{DIT_API_URL}/v1/responses"
+            url = f"{DIT_API_URL}/v1/chat/completions"
             
             sys_content = system_prompt or "You are a Senior Institutional Research Analyst at Asetpedia Intelligence."
             if caveman:
                 sys_content += f" {CAVEMAN_PROMPT}"
                 
-            dit_input = [
-                {"role": "system", "content": [{"type": "input_text", "text": sys_content}]},
-                {"role": "user", "content": [{"type": "input_text", "text": user_prompt}]}
+            messages = [
+                {"role": "system", "content": sys_content},
+                {"role": "user", "content": user_prompt}
             ]
             
             payload = {
                 "model": model,
-                "max_output_tokens": 4096,
-                "input": dit_input
+                "stream": True,
+                "temperature": 0.3,
+                "messages": messages
             }
             
             try:
                 res = requests.post(url, json=payload, headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {dit_api_key}"
-                }, timeout=60)
+                }, timeout=120, stream=True)
                 
                 if res.status_code == 200:
-                    res_json = res.json()
-                    content = res_json.get('output', [{}])[0].get('content', [{}])[0].get('text', '')
-                    if content:
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                    else:
-                        yield f"data: {json.dumps({'error': 'Empty response from DIT API'})}\n\n"
+                    for line in res.iter_lines():
+                        if not line: continue
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith('data: '):
+                            data_chunk = line_str[6:]
+                            if data_chunk == '[DONE]': break
+                            try:
+                                chunk_json = json.loads(data_chunk)
+                                content = chunk_json.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                if content:
+                                    yield f"data: {json.dumps({'content': content})}\n\n"
+                            except:
+                                continue
                 else:
                     yield f"data: {json.dumps({'error': f'DIT API Error: {res.status_code} - {res.text}'})}\n\n"
             except Exception as e:
