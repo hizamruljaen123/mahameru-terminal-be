@@ -88,8 +88,12 @@ def save_to_hot_cache(articles):
     finally:
         conn.close()
 
-def get_hot_news(category=None):
-    """Retrieve news from fast SQLite cache. Optionally filter by category."""
+def get_hot_news(category=None, limit=1000):
+    """
+    Retrieve news from fast SQLite cache. 
+    Optimization: Reduced default limit from 5000 to 1000 to prevent 
+    excessive JSON parsing overhead on the main thread.
+    """
     conn = get_cache_conn()
     try:
         if category:
@@ -98,8 +102,9 @@ def get_hot_news(category=None):
                 (category.upper(),)
             ).fetchall()
         else:
+            # We fetch a reasonable pool to cover most priority categories
             rows = conn.execute(
-                'SELECT category, data FROM hot_news ORDER BY timestamp DESC LIMIT 5000'
+                f'SELECT category, data FROM hot_news ORDER BY timestamp DESC LIMIT {limit}'
             ).fetchall()
 
         result = {}
@@ -107,7 +112,11 @@ def get_hot_news(category=None):
             cat = row['category']
             if cat not in result:
                 result[cat] = []
-            result[cat].append(json.loads(row['data']))
+            
+            # Optimization: Only parse JSON if we haven't reached a reasonable limit per category
+            # in the combined result set to save CPU cycles.
+            if len(result[cat]) < 20:
+                result[cat].append(json.loads(row['data']))
         return result
     finally:
         conn.close()
