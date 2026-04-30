@@ -205,7 +205,8 @@ def get_news():
     news_list = []
     
     try:
-        gnews_res = requests.get(f"https://api.asetpedia.online/gnews/api/gnews/search?q={symbol}", timeout=5)
+        query = f"{symbol} Company News developments"
+        gnews_res = requests.get(f"https://api.asetpedia.online/gnews/api/gnews/search?q={query}&lang=en&country=US", timeout=5)
         if gnews_res.status_code == 200:
             news_list = gnews_res.json().get('data', [])
     except:
@@ -244,7 +245,8 @@ def get_exec_news():
     
     news_list = []
     try:
-        gnews_res = requests.get(f"https://api.asetpedia.online/gnews/api/gnews/search?q={name}", timeout=5)
+        query = f"{name} Leadership Board Management news"
+        gnews_res = requests.get(f"https://api.asetpedia.online/gnews/api/gnews/search?q={query}&lang=en&country=US", timeout=5)
         if gnews_res.status_code == 200:
             news_list = gnews_res.json().get('data', [])
     except:
