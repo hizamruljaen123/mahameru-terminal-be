@@ -64,25 +64,32 @@ CAVEMAN_PROMPT = "RESPOND TERSE LIKE SMART CAVEMAN. ALL TECHNICAL SUBSTANCE STAY
 DIT_API_URL = "https://api.dit.ai"
 
 DIT_MODELS = [
-    {"id": "claude-opus-4-7", "name": "Claude Opus 4.7", "provider": "Anthropic"},
-    {"id": "claude-opus-4.6", "name": "Claude Opus 4.6", "provider": "Anthropic"},
-    {"id": "gpt-5.5", "name": "GPT 5.5", "provider": "OpenAI"},
+    # --- Tier 1: Most Affordable (Flash / Mini / Nano) ---
+    {"id": "deepseek-r1", "name": "DeepSeek R1", "provider": "DeepSeek"},
+    {"id": "deepseek-v3.2", "name": "DeepSeek V3.2", "provider": "DeepSeek"},
+    {"id": "gpt-5.4-nano", "name": "GPT 5.4 Nano", "provider": "OpenAI"},
+    {"id": "gpt-5.4-mini", "name": "GPT 5.4 Mini", "provider": "OpenAI"},
+    {"id": "gemini-3-flash", "name": "Gemini 3 Flash", "provider": "Google"},
+    {"id": "claude-haiku-4.5", "name": "Claude Haiku 4.5", "provider": "Anthropic"},
+    {"id": "grok-3-mini", "name": "Grok 3 Mini", "provider": "xAI"},
+    {"id": "llama-4-scout", "name": "Llama 4 Scout", "provider": "Meta"},
+    {"id": "qwen3-coder", "name": "Qwen3 Coder", "provider": "Alibaba"},
     {"id": "kimi-k2.5", "name": "Kimi k2.5", "provider": "Moonshot AI"},
     {"id": "minimax-m2.1", "name": "Minimax m2.1", "provider": "Minimax"},
-    {"id": "minimax-m2.5", "name": "Minimax m2.5", "provider": "Minimax"},
-    {"id": "minimax-m2.7", "name": "Minimax m2.7", "provider": "Minimax"},
-    {"id": "claude-haiku-4.5", "name": "Claude Haiku 4.5", "provider": "Anthropic"},
-    {"id": "claude-opus-4.5", "name": "Claude Opus 4.5", "provider": "Anthropic"},
-    {"id": "claude-sonnet-4.5", "name": "Claude Sonnet 4.5", "provider": "Anthropic"},
-    {"id": "claude-sonnet-4.6", "name": "Claude Sonnet 4.6", "provider": "Anthropic"},
-    {"id": "gemini-3-flash", "name": "Gemini 3 Flash", "provider": "Google"},
-    {"id": "gemini-3-pro", "name": "Gemini 3 Pro", "provider": "Google"},
+    
+    # --- Tier 2: Mid-Range (Pro / Medium / Sonnet) ---
     {"id": "gemini-3.1-pro", "name": "Gemini 3.1 Pro", "provider": "Google"},
-    {"id": "gpt-5.1", "name": "GPT 5.1", "provider": "OpenAI"},
-    {"id": "gpt-5.2", "name": "GPT 5.2", "provider": "OpenAI"},
-    {"id": "gpt-5.3", "name": "GPT 5.3", "provider": "OpenAI"},
+    {"id": "claude-sonnet-4.6", "name": "Claude Sonnet 4.6", "provider": "Anthropic"},
+    {"id": "devstral-medium", "name": "Devstral Medium", "provider": "Mistral"},
+    {"id": "magistral-medium", "name": "Magistral Medium", "provider": "Mistral"},
+    {"id": "llama-4-maverick", "name": "Llama 4 Maverick", "provider": "Meta"},
     {"id": "gpt-5.4", "name": "GPT 5.4", "provider": "OpenAI"},
-    {"id": "gpt-5.4-mini", "name": "GPT 5.4 Mini", "provider": "OpenAI"},
+    
+    # --- Tier 3: Flagship (Opus / Ultra / Standard) ---
+    {"id": "grok-3", "name": "Grok 3", "provider": "xAI"},
+    {"id": "qwen3-235b", "name": "Qwen3 235B", "provider": "Alibaba"},
+    {"id": "gpt-5.5", "name": "GPT 5.5", "provider": "OpenAI"},
+    {"id": "claude-opus-4.7", "name": "Claude Opus 4.7", "provider": "Anthropic"},
 ]
 
 def clean_data(val):
