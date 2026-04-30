@@ -46,15 +46,44 @@ AVAILABLE_APIS = [
         "method": "GET"
     },
     {
-        "category": "Sentiment",
-        "description": "Analyze sentiment for a specific keyword/ticker.",
         "endpoint": "https://api.asetpedia.online/sentiment/api/sentiment/summary-all",
         "service": "sentiment_service (Port 5008)",
         "method": "GET"
+    },
+    {
+        "category": "AI Analysis (DIT)",
+        "description": "Multi-model AI synthesis engine via DIT.ai",
+        "endpoint": "https://api.dit.ai/v1/responses",
+        "service": "research_service (External)",
+        "method": "POST"
     }
 ]
 
 CAVEMAN_PROMPT = "RESPOND TERSE LIKE SMART CAVEMAN. ALL TECHNICAL SUBSTANCE STAY. ONLY FLUFF DIE. NO ARTICLES, NO FILLER, NO PLEASANTRIES, NO HEDGING. USE SENTENCE FRAGMENTS. CODE BLOCKS UNTOUCHED."
+
+DIT_API_URL = "https://api.dit.ai"
+
+DIT_MODELS = [
+    {"id": "claude-opus-4-7", "name": "Claude Opus 4.7", "provider": "Anthropic"},
+    {"id": "claude-opus-4.6", "name": "Claude Opus 4.6", "provider": "Anthropic"},
+    {"id": "gpt-5.5", "name": "GPT 5.5", "provider": "OpenAI"},
+    {"id": "kimi-k2.5", "name": "Kimi k2.5", "provider": "Moonshot AI"},
+    {"id": "minimax-m2.1", "name": "Minimax m2.1", "provider": "Minimax"},
+    {"id": "minimax-m2.5", "name": "Minimax m2.5", "provider": "Minimax"},
+    {"id": "minimax-m2.7", "name": "Minimax m2.7", "provider": "Minimax"},
+    {"id": "claude-haiku-4.5", "name": "Claude Haiku 4.5", "provider": "Anthropic"},
+    {"id": "claude-opus-4.5", "name": "Claude Opus 4.5", "provider": "Anthropic"},
+    {"id": "claude-sonnet-4.5", "name": "Claude Sonnet 4.5", "provider": "Anthropic"},
+    {"id": "claude-sonnet-4.6", "name": "Claude Sonnet 4.6", "provider": "Anthropic"},
+    {"id": "gemini-3-flash", "name": "Gemini 3 Flash", "provider": "Google"},
+    {"id": "gemini-3-pro", "name": "Gemini 3 Pro", "provider": "Google"},
+    {"id": "gemini-3.1-pro", "name": "Gemini 3.1 Pro", "provider": "Google"},
+    {"id": "gpt-5.1", "name": "GPT 5.1", "provider": "OpenAI"},
+    {"id": "gpt-5.2", "name": "GPT 5.2", "provider": "OpenAI"},
+    {"id": "gpt-5.3", "name": "GPT 5.3", "provider": "OpenAI"},
+    {"id": "gpt-5.4", "name": "GPT 5.4", "provider": "OpenAI"},
+    {"id": "gpt-5.4-mini", "name": "GPT 5.4 Mini", "provider": "OpenAI"},
+]
 
 def clean_data(val):
     import numpy as np
@@ -86,22 +115,32 @@ def search():
 
 @app.route('/api/models', methods=['GET'])
 @app.route('/research/api/models', methods=['GET'])
-def get_deepseek_models():
+def get_models():
     api_key = os.environ.get('DEEPSEEK_API_KEY')
-    if not api_key:
-        return jsonify({"status": "error", "message": "DeepSeek API Key not found"}), 500
-    try:
-        response = requests.get(
-            'https://api.deepseek.com/models',
-            headers={
-                'Accept': 'application/json',
-                'Authorization': f'Bearer {api_key}'
-            },
-            timeout=10
-        )
-        return jsonify(response.json())
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    models = []
+    
+    # 1. Try to get DeepSeek models
+    if api_key:
+        try:
+            response = requests.get(
+                'https://api.deepseek.com/models',
+                headers={
+                    'Accept': 'application/json',
+                    'Authorization': f'Bearer {api_key}'
+                },
+                timeout=5
+            )
+            if response.status_code == 200:
+                ds_models = response.json().get('data', [])
+                for m in ds_models:
+                    models.append({"id": m['id'], "name": f"DeepSeek {m['id']}", "provider": "DeepSeek"})
+        except:
+            pass
+            
+    # 2. Add DIT Models
+    models.extend(DIT_MODELS)
+    
+    return jsonify({"status": "success", "data": models})
 
 @app.route('/api/data/fundamental', methods=['GET'])
 @app.route('/research/api/data/fundamental', methods=['GET'])
@@ -297,18 +336,85 @@ def analyze_report():
     if not api_key:
         return jsonify({"status": "error", "message": "DeepSeek API Key wajib diisi."}), 400
 
+    prompts = {
+        1: f"Fokus pada: **1. Ringkasan Emiten & Analisis Sektor**. Jelaskan model bisnisnya, tren industrinya, dan profil umum perusahaan.",
+        2: f"Fokus pada: **2. Bedah Fundamental Keuangan**. Analisis laporan keuangan historis, rasio margin, valuasi, kas, dan utang. Apakah valuasi saat ini premium atau murah?",
+        3: f"Fokus pada: **3. Analisis Pergerakan Harga & Teknis**. Bahas indikator teknis terkini, level support/resistance, Fibonacci, dan pola harga saham.",
+        4: f"Fokus pada: **4. Sorotan Berita & Prospek Sentimen**. Tinjau berita terhangat, pergerakan sentimen publik, dan sentimen pengurus manajemen.",
+        5: f"Fokus pada: **5. Kesimpulan & Rekomendasi Investasi**. Berikan kesimpulan dan keputusan investasi tegas (Strong Buy/Buy/Hold/Sell/Strong Sell), target harga, dan profil risikonya."
+    }
+    stage_prompt = prompts.get(stage, prompts[1])
+
+    is_dit = any(m['id'] == model for m in DIT_MODELS)
+
     def generate():
+        if is_dit:
+            # DIT API Logic
+            dit_api_key = os.environ.get('DIT_API_KEY')
+            if not dit_api_key:
+                yield f"data: {json.dumps({'error': 'DIT API Key not found'})}\n\n"
+                return
+
+            url = f"{DIT_API_URL}/v1/responses"
+            
+            # Prepare DIT-style messages
+            system_msg = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
+            if caveman:
+                system_msg += f" {CAVEMAN_PROMPT}"
+                
+            dit_input = [{"role": "system", "content": [{"type": "input_text", "text": system_msg}]}]
+            
+            # Context messages
+            for s_num in range(1, stage):
+                s_key = str(s_num)
+                if s_key in generated_stages and generated_stages[s_key]:
+                    dit_input.append({"role": "user", "content": [{"type": "input_text", "text": prompts.get(s_num, "")}]})
+                    dit_input.append({"role": "assistant", "content": [{"type": "input_text", "text": generated_stages[s_key]}]})
+            
+            # Final prompt
+            prompt = f"""
+            Anda adalah Analis Keuangan Profesional tingkat institusional dari Asetpedia.
+            Tuliskan analisis lanjutan yang komprehensif untuk emiten '{symbol}'.
+            
+            Berikut adalah sub-bagian yang harus Anda tulis sekarang:
+            {stage_prompt}
+
+            Data Agregat yang Tersedia untuk Konteks Anda (Gunakan jika relevan):
+            {json.dumps(full_data, indent=2)}
+
+            Tuliskan dengan gaya bahasa profesional selayaknya riset dana lindung nilai (hedge fund).
+            PENTING: Gunakan format penulisan normal (Proper Case / Sentence Case). DILARANG menggunakan huruf besar semua (ALL CAPS) untuk teks paragraf. Jika menyajikan metrik dalam tabel, WAJIB gunakan format Tabel Markdown valid (`|` dan `|---|`). Gunakan hanya heading tingkat 3 atau 4 (### atau ####) untuk merinci laporan.
+            """
+            dit_input.append({"role": "user", "content": [{"type": "input_text", "text": prompt}]})
+            
+            payload = {
+                "model": model,
+                "max_output_tokens": 4096,
+                "input": dit_input
+            }
+            
+            try:
+                res = requests.post(url, json=payload, headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {dit_api_key}"
+                }, timeout=60)
+                
+                if res.status_code == 200:
+                    res_json = res.json()
+                    # The user example: res_json['output'][0]['content'][0]['text']
+                    content = res_json.get('output', [{}])[0].get('content', [{}])[0].get('text', '')
+                    if content:
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'error': 'Empty response from DIT API'})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'error': f'DIT API Error: {res.status_code} - {res.text}'})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
+        # DeepSeek Logic
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        
-        prompts = {
-            1: f"Fokus pada: **1. Ringkasan Emiten & Analisis Sektor**. Jelaskan model bisnisnya, tren industrinya, dan profil umum perusahaan.",
-            2: f"Fokus pada: **2. Bedah Fundamental Keuangan**. Analisis laporan keuangan historis, rasio margin, valuasi, kas, dan utang. Apakah valuasi saat ini premium atau murah?",
-            3: f"Fokus pada: **3. Analisis Pergerakan Harga & Teknis**. Bahas indikator teknis terkini, level support/resistance, Fibonacci, dan pola harga saham.",
-            4: f"Fokus pada: **4. Sorotan Berita & Prospek Sentimen**. Tinjau berita terhangat, pergerakan sentimen publik, dan sentimen pengurus manajemen.",
-            5: f"Fokus pada: **5. Kesimpulan & Rekomendasi Investasi**. Berikan kesimpulan dan keputusan investasi tegas (Strong Buy/Buy/Hold/Sell/Strong Sell), target harga, dan profil risikonya."
-        }
-        
-        stage_prompt = prompts.get(stage, prompts[1])
         
         system_msg = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
         if caveman:
@@ -384,7 +490,52 @@ def analyze_compare():
     if not user_prompt:
         return jsonify({"status": "error", "message": "Prompt not provided."}), 400
 
+    is_dit = any(m['id'] == model for m in DIT_MODELS)
+
     def generate():
+        if is_dit:
+            # DIT API Logic for Comparison
+            dit_api_key = os.environ.get('DIT_API_KEY')
+            if not dit_api_key:
+                yield f"data: {json.dumps({'error': 'DIT API Key not found'})}\n\n"
+                return
+
+            url = f"{DIT_API_URL}/v1/responses"
+            
+            sys_content = system_prompt or "You are a Senior Institutional Research Analyst at Asetpedia Intelligence."
+            if caveman:
+                sys_content += f" {CAVEMAN_PROMPT}"
+                
+            dit_input = [
+                {"role": "system", "content": [{"type": "input_text", "text": sys_content}]},
+                {"role": "user", "content": [{"type": "input_text", "text": user_prompt}]}
+            ]
+            
+            payload = {
+                "model": model,
+                "max_output_tokens": 4096,
+                "input": dit_input
+            }
+            
+            try:
+                res = requests.post(url, json=payload, headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {dit_api_key}"
+                }, timeout=60)
+                
+                if res.status_code == 200:
+                    res_json = res.json()
+                    content = res_json.get('output', [{}])[0].get('content', [{}])[0].get('text', '')
+                    if content:
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'error': 'Empty response from DIT API'})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'error': f'DIT API Error: {res.status_code} - {res.text}'})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
         try:
             client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
             
