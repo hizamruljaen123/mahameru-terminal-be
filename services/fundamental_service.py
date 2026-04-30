@@ -51,7 +51,7 @@ def fetch_wikipedia_summary(company_name):
     except Exception as e:
         print(f"Wikipedia fetch error for {company_name}: {e}")
     
-    return "Tidak ada ringkasan Wikipedia."
+    return None
 
 
 def get_fundamental_data(symbol):

@@ -172,14 +172,16 @@ def get_market():
         hist_df = ticker.history(period="1y", interval="1d")
         if not hist_df.empty:
             for ts, row in hist_df.iterrows():
-                historical_prices.append({
-                    "date": str(ts)[:10],
-                    "open": clean_data(row.get("Open")),
-                    "high": clean_data(row.get("High")),
-                    "low": clean_data(row.get("Low")),
-                    "close": clean_data(row.get("Close")),
-                    "volume": int(row.get("Volume")) if pd.notna(row.get("Volume")) else 0
-                })
+                close_val = clean_data(row.get("Close"))
+                if close_val and close_val > 0:
+                    historical_prices.append({
+                        "date": str(ts)[:10],
+                        "open": clean_data(row.get("Open")),
+                        "high": clean_data(row.get("High")),
+                        "low": clean_data(row.get("Low")),
+                        "close": close_val,
+                        "volume": int(row.get("Volume")) if pd.notna(row.get("Volume")) else 0
+                    })
 
         intraday_prices = []
         intraday_df = ticker.history(period="1d", interval="5m")
@@ -187,10 +189,12 @@ def get_market():
             intraday_df = ticker.history(period="1d", interval="15m")
         if not intraday_df.empty:
             for ts, row in intraday_df.iterrows():
-                intraday_prices.append({
-                    "time": str(ts)[11:16],
-                    "close": clean_data(row.get("Close"))
-                })
+                close_val = clean_data(row.get("Close"))
+                if close_val and close_val > 0:
+                    intraday_prices.append({
+                        "time": str(ts)[11:16],
+                        "close": close_val
+                    })
         
         return jsonify({"status": "success", "data": {"historical": historical_prices, "intraday": intraday_prices}})
     except Exception as e:
@@ -341,7 +345,8 @@ def analyze_report():
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                stream=True
+                stream=True,
+                max_tokens=8192
             )
             for chunk in response:
                 content = chunk.choices[0].delta.content
@@ -395,7 +400,7 @@ def analyze_compare():
                 model=model,
                 messages=messages,
                 stream=True,
-                max_tokens=4000,
+                max_tokens=8192,
                 temperature=0.3,  # Lower temperature for more precise institutional analysis
             )
             for chunk in response:
