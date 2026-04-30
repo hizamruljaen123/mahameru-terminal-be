@@ -14,7 +14,7 @@ def clean_data(val):
     except:
         return None
 
-def fetch_wikipedia_summary(company_name):
+def fetch_wikipedia_summary(company_name, search_url="https://en.wikipedia.org/w/api.php"):
     """
     Fetches a summary from Wikipedia for the given company name.
     Uses a two-step process: search for the best matching title, then fetch the summary.
@@ -24,7 +24,6 @@ def fetch_wikipedia_summary(company_name):
     }
     try:
         # Step 1: Search for the best matching title
-        search_url = "https://en.wikipedia.org/w/api.php"
         search_params = {
             "action": "query",
             "list": "search",
@@ -41,13 +40,24 @@ def fetch_wikipedia_summary(company_name):
             if search_results:
                 best_title = search_results[0]['title']
                 
-                # Step 2: Fetch the summary for the found title
-                summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{best_title.replace(' ', '_')}"
-                summary_res = requests.get(summary_url, headers=headers, timeout=5)
+                # Step 2: Fetch a more detailed extract using the Action API
+                summary_params = {
+                    "action": "query",
+                    "prop": "extracts",
+                    "exintro": True,
+                    "explaintext": True,
+                    "titles": best_title,
+                    "format": "json"
+                }
+                summary_res = requests.get(search_url, params=summary_params, headers=headers, timeout=5)
                 
                 if summary_res.status_code == 200:
                     summary_data = summary_res.json()
-                    return summary_data.get('extract', "Tidak ada ringkasan Wikipedia.")
+                    pages = summary_data.get('query', {}).get('pages', {})
+                    for page_id in pages:
+                        extract = pages[page_id].get('extract')
+                        if extract:
+                            return extract
     except Exception as e:
         print(f"Wikipedia fetch error for {company_name}: {e}")
     
@@ -65,7 +75,11 @@ def get_fundamental_data(symbol):
             financials[year] = {str(idx): clean_data(ticker.financials.loc[idx, col]) for idx in ticker.financials.index}
 
     company_name = info.get("longName") or info.get("shortName", symbol)
-    wiki_summary = fetch_wikipedia_summary(company_name)
+    country = info.get("country", "N/A")
+    
+    # Use Indonesian Wikipedia for Indonesian companies
+    wiki_base_url = "https://id.wikipedia.org/w/api.php" if country == "Indonesia" else "https://en.wikipedia.org/w/api.php"
+    wiki_summary = fetch_wikipedia_summary(company_name, wiki_base_url)
 
     snapshot = {
         "symbol": symbol,

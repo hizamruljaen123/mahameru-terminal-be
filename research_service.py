@@ -116,8 +116,8 @@ def get_fundamental():
 @app.route('/api/gnews/search', methods=['GET'])
 def search_gnews():
     q = request.args.get('q', '')
-    lang = request.args.get('lang', 'en')
-    country = request.args.get('country', 'US')
+    lang = request.args.get('lang', 'id')
+    country = request.args.get('country', 'ID')
     period = request.args.get('period')
     
     if period == 'None' or not period:
