@@ -274,6 +274,56 @@ def analyze_report():
 
     return Response(generate(), mimetype='text/event-stream')
 
+
+@app.route('/api/analyze/compare', methods=['POST'])
+@app.route('/research/api/analyze/compare', methods=['POST'])
+def analyze_compare():
+    """
+    Institutional Comparative Analysis Engine
+    Accepts multi-symbol data and streams DeepSeek AI analysis for one stage.
+    Frontend provides pre-built system_prompt + user_prompt from promptTemplates.js
+    """
+    data = request.json or {}
+    symbols = data.get('symbols', [])
+    stage = int(data.get('stage', 1))
+    model = data.get('model', 'deepseek-v4-flash').strip()
+    system_prompt = data.get('system_prompt', '')
+    user_prompt = data.get('user_prompt', '')
+    api_key = data.get('api_key', '').strip() or os.environ.get('DEEPSEEK_API_KEY')
+
+    if not api_key:
+        return jsonify({"status": "error", "message": "DeepSeek API Key required."}), 400
+
+    if not symbols or len(symbols) < 2:
+        return jsonify({"status": "error", "message": "At least 2 symbols required for comparison."}), 400
+
+    if not user_prompt:
+        return jsonify({"status": "error", "message": "Prompt not provided."}), 400
+
+    def generate():
+        try:
+            client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            messages = [
+                {"role": "system", "content": system_prompt or "You are a Senior Institutional Research Analyst at Asetpedia Intelligence."},
+                {"role": "user", "content": user_prompt}
+            ]
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                stream=True,
+                max_tokens=4000,
+                temperature=0.3,  # Lower temperature for more precise institutional analysis
+            )
+            for chunk in response:
+                content = chunk.choices[0].delta.content
+                if content is not None:
+                    yield f"data: {json.dumps({'content': content})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream',
+                    headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache'})
+
 if __name__ == '__main__':
     import sys
     port = 5202
