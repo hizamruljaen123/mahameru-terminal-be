@@ -48,7 +48,8 @@ def search_gnews():
                     "title": title,
                     "publisher": item.get("publisher", {}).get("title") if isinstance(item.get("publisher"), dict) else item.get("publisher", "INFRA_SOURCE"),
                     "time": ts,
-                    "link": item.get("url", item.get("link", "#"))
+                    "link": item.get("url", item.get("link", "#")),
+                    "description": item.get("description", item.get("snippet", ""))
                 })
         
         # Sort by time

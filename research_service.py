@@ -9,6 +9,8 @@ import yfinance as yf
 from openai import OpenAI
 import pandas as pd
 import numpy as np
+from gnews import GNews
+from datetime import datetime
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -88,6 +90,54 @@ def get_fundamental():
         data = get_fundamental_data(symbol)
         return jsonify({"status": "success", "data": data})
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/gnews/search', methods=['GET'])
+def search_gnews():
+    q = request.args.get('q', '')
+    lang = request.args.get('lang', 'en')
+    country = request.args.get('country', 'US')
+    period = request.args.get('period')
+    
+    if period == 'None' or not period:
+        period = None
+
+    if not q:
+        return jsonify({"status": "success", "data": []})
+        
+    try:
+        # Direct library usage in main BE
+        google_news = GNews(language=lang, country=country, period=period, max_results=100)
+        gn_results = google_news.get_news(q)
+        
+        news_normalized = []
+        if gn_results:
+            for item in gn_results:
+                title = item.get("title")
+                if not title or title == "No Title": continue
+                
+                try:
+                    pub_date = item.get('published date') or item.get('publishedAt')
+                    if pub_date:
+                        dt = datetime.strptime(pub_date, '%a, %d %b %Y %H:%M:%S %Z')
+                        ts = int(dt.timestamp())
+                    else:
+                        ts = int(time.time())
+                except: 
+                    ts = int(time.time())
+                
+                news_normalized.append({
+                    "title": title,
+                    "publisher": item.get("publisher", {}).get("title") if isinstance(item.get("publisher"), dict) else item.get("publisher", "INFRA_SOURCE"),
+                    "time": ts,
+                    "link": item.get("url", item.get("link", "#")),
+                    "description": item.get("description", item.get("snippet", ""))
+                })
+        
+        news_normalized.sort(key=lambda x: x['time'], reverse=True)
+        return jsonify({"status": "success", "data": news_normalized})
+    except Exception as e:
+        print(f"GNews BE Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/data/market', methods=['GET'])
