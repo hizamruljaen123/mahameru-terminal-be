@@ -659,12 +659,9 @@ def analyze_compare():
     is_dit = any(m['id'] == model for m in DIT_MODELS)
     is_gemini = any(m['id'] == model for m in GEMINI_MODELS)
 
-    # Inject Master System Prompt if any symbol is a banking stock
-    has_banking_symbol = any(is_banking_symbol(s) for s in symbols)
-    if has_banking_symbol and system_prompt:
-        system_prompt = MASTER_SYSTEM_PROMPT + "\n\n" + system_prompt
-    elif has_banking_symbol and not system_prompt:
-        system_prompt = MASTER_SYSTEM_PROMPT
+    # NOTE: MASTER_SYSTEM_PROMPT injection is handled on the FE side (enhancedPrompt.ts).
+    # The FE already sends the banking-specific system prompt in system_prompt.
+    # Removing duplicate injection here to avoid double-prompting the AI.
 
     def generate():
         if is_gemini:
