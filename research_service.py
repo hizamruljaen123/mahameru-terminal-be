@@ -71,7 +71,10 @@ DIT_MODELS = [
     {"id": "gpt-5.5", "name": "GPT 5.5", "provider": "OpenAI"},
     {"id": "gpt-5.4-mini", "name": "GPT 5.4-Mini", "provider": "OpenAI"},
     {"id": "kimi-k2.5", "name": "Kimi k2.5", "provider": "Moonshot AI"},
-    {"id": "minimax-m2.7", "name": "Minimax m2.7", "provider": "Minimax"},
+]
+
+GEMINI_MODELS = [
+    {"id": "gemini-flash-latest", "name": "Gemini 1.5 Flash", "provider": "Google"},
 ]
 
 def clean_data(val):
@@ -134,7 +137,11 @@ def get_models():
         except:
             pass
             
-    # 2. Add DIT Models (Overwrite if ID matches to ensure correct provider/name)
+    # 2. Add Gemini Models
+    for m in GEMINI_MODELS:
+        model_map[m['id']] = m
+
+    # 3. Add DIT Models (Overwrite if ID matches to ensure correct provider/name)
     for m in DIT_MODELS:
         model_map[m['id']] = m
     
@@ -347,8 +354,72 @@ def analyze_report():
     stage_prompt = prompts.get(stage, prompts[1])
 
     is_dit = any(m['id'] == model for m in DIT_MODELS)
+    is_gemini = any(m['id'] == model for m in GEMINI_MODELS)
 
     def generate():
+        if is_gemini:
+            # Gemini API Logic
+            gemini_key = os.environ.get('GEMINI_API_KEY')
+            if not gemini_key:
+                yield f"data: {json.dumps({'error': 'Gemini API Key not found'})}\n\n"
+                return
+
+            system_instruction = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
+            if caveman:
+                system_instruction += f" {CAVEMAN_PROMPT}"
+            
+            contents = []
+            for s_num in range(1, stage):
+                s_key = str(s_num)
+                if s_key in generated_stages and generated_stages[s_key]:
+                    contents.append({"role": "user", "parts": [{"text": prompts.get(s_num, " ")}]})
+                    contents.append({"role": "model", "parts": [{"text": generated_stages[s_key]}]})
+
+            prompt_text = f"""
+            Anda adalah Analis Keuangan Profesional tingkat institusional dari Asetpedia.
+            Tuliskan analisis lanjutan yang komprehensif untuk emiten '{symbol}'.
+            
+            Berikut adalah sub-bagian yang harus Anda tulis sekarang:
+            {stage_prompt}
+
+            Data Agregat yang Tersedia untuk Konteks Anda (Gunakan jika relevan):
+            {json.dumps(full_data, indent=2)}
+
+            Tuliskan dengan gaya bahasa profesional selayaknya riset dana lindung nilai (hedge fund).
+            PENTING: Gunakan format penulisan normal (Proper Case / Sentence Case). DILARANG menggunakan huruf besar semua (ALL CAPS) untuk teks paragraf. Jika menyajikan metrik dalam tabel, WAJIB gunakan format Tabel Markdown valid (`|` dan `|---|`). Gunakan hanya heading tingkat 3 atau 4 (### atau ####) untuk merinci laporan.
+            """
+            contents.append({"role": "user", "parts": [{"text": prompt_text}]})
+
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={gemini_key}"
+            payload = {
+                "contents": contents,
+                "system_instruction": {"parts": [{"text": system_instruction}]},
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "maxOutputTokens": 8192
+                }
+            }
+
+            try:
+                res = requests.post(url, json=payload, stream=True, timeout=120)
+                if res.status_code == 200:
+                    import re
+                    for chunk in res.iter_content(chunk_size=None):
+                        if not chunk: continue
+                        chunk_str = chunk.decode('utf-8')
+                        texts = re.findall(r'"text":\s*"(.*?)"', chunk_str)
+                        for t in texts:
+                            try:
+                                t_clean = t.encode('utf-8').decode('unicode_escape')
+                                yield f"data: {json.dumps({'content': t_clean})}\n\n"
+                            except:
+                                yield f"data: {json.dumps({'content': t})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'error': f'Gemini API Error: {res.status_code} - {res.text}'})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
         if is_dit:
             # DIT API Logic
             dit_api_key = os.environ.get('DIT_API_KEY')
@@ -499,8 +570,50 @@ def analyze_compare():
         return jsonify({"status": "error", "message": "Prompt not provided."}), 400
 
     is_dit = any(m['id'] == model for m in DIT_MODELS)
+    is_gemini = any(m['id'] == model for m in GEMINI_MODELS)
 
     def generate():
+        if is_gemini:
+            # Gemini API Logic for Comparison
+            gemini_key = os.environ.get('GEMINI_API_KEY')
+            if not gemini_key:
+                yield f"data: {json.dumps({'error': 'Gemini API Key not found'})}\n\n"
+                return
+
+            sys_content = system_prompt or "You are a Senior Institutional Research Analyst at Asetpedia Intelligence."
+            if caveman:
+                sys_content += f" {CAVEMAN_PROMPT}"
+            
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={gemini_key}"
+            payload = {
+                "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+                "system_instruction": {"parts": [{"text": sys_content}]},
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "maxOutputTokens": 8192
+                }
+            }
+
+            try:
+                res = requests.post(url, json=payload, stream=True, timeout=120)
+                if res.status_code == 200:
+                    import re
+                    for chunk in res.iter_content(chunk_size=None):
+                        if not chunk: continue
+                        chunk_str = chunk.decode('utf-8')
+                        texts = re.findall(r'"text":\s*"(.*?)"', chunk_str)
+                        for t in texts:
+                            try:
+                                t_clean = t.encode('utf-8').decode('unicode_escape')
+                                yield f"data: {json.dumps({'content': t_clean})}\n\n"
+                            except:
+                                yield f"data: {json.dumps({'content': t})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'error': f'Gemini API Error: {res.status_code} - {res.text}'})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
         if is_dit:
             # DIT API Logic for Comparison
             dit_api_key = os.environ.get('DIT_API_KEY')
