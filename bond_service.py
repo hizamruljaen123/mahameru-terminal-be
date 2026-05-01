@@ -235,13 +235,17 @@ def get_inversion_tracker():
         for date in common_dates[-365:]:  # Last year
             try:
                 if 'Close' in hist2y.columns and 'Close' in hist10y.columns:
-                    spread = float(hist2y.loc[date, 'Close']) - float(hist10y.loc[date, 'Close'])
-                    spread_history.append({
-                        "date": date.strftime('%Y-%m-%d'),
-                        "spread": round(spread, 3),
-                        "y2y": round(float(hist2y.loc[date, 'Close']), 3),
-                        "y10y": round(float(hist10y.loc[date, 'Close']), 3)
-                    })
+                    y2y = clean(hist2y.loc[date, 'Close'])
+                    y10y = clean(hist10y.loc[date, 'Close'])
+                    
+                    if y2y is not None and y10y is not None:
+                        spread = y2y - y10y
+                        spread_history.append({
+                            "date": date.strftime('%Y-%m-%d'),
+                            "spread": round(spread, 3),
+                            "y2y": round(y2y, 3),
+                            "y10y": round(y10y, 3)
+                        })
             except: continue
 
         # Identify inversion periods
@@ -276,9 +280,9 @@ def get_inversion_tracker():
         result = {
             "spread_history": spread_history[-90:],  # Last 90 days for chart
             "inversion_periods": inversion_periods,
-            "current_spread": current_spread,
+            "current_spread": clean(current_spread),
             "days_inverted": sum(1 for s in spread_history[-30:] if s['spread'] < 0) if spread_history else 0,
-            "max_inversion_30d": min((s['spread'] for s in spread_history[-30:] if s['spread'] < 0), default=0),
+            "max_inversion_30d": clean(min((s['spread'] for s in spread_history[-30:] if s['spread'] < 0), default=0)),
             "last_updated": int(time.time())
         }
         _set_cached("inversion_tracker", result)
@@ -311,21 +315,22 @@ def get_credit_spreads():
 
         for date in common:
             try:
-                hyg_p = float(hist_hyg.loc[date, 'Close'])
-                lqd_p = float(hist_lqd.loc[date, 'Close'])
-                spy_p = float(hist_spy.loc[date, 'Close'])
+                hyg_p = clean(hist_hyg.loc[date, 'Close'])
+                lqd_p = clean(hist_lqd.loc[date, 'Close'])
+                spy_p = clean(hist_spy.loc[date, 'Close'])
 
-                # Normalized spread: HYG/LQD ratio (inverse of yield spread)
-                ratio = hyg_p / lqd_p
-                rel_strength = (hyg_p / spy_p) / (lqd_p / spy_p)
+                if hyg_p and lqd_p and spy_p:
+                    # Normalized spread: HYG/LQD ratio (inverse of yield spread)
+                    ratio = hyg_p / lqd_p
+                    rel_strength = (hyg_p / spy_p) / (lqd_p / spy_p)
 
-                spread_series.append({
-                    "date": date.strftime('%Y-%m-%d'),
-                    "hyg_price": round(hyg_p, 2),
-                    "lqd_price": round(lqd_p, 2),
-                    "hy_lq_ratio": round(ratio, 4),
-                    "relative_strength": round(rel_strength, 4)
-                })
+                    spread_series.append({
+                        "date": date.strftime('%Y-%m-%d'),
+                        "hyg_price": round(hyg_p, 2),
+                        "lqd_price": round(lqd_p, 2),
+                        "hy_lq_ratio": round(ratio, 4),
+                        "relative_strength": round(rel_strength, 4)
+                    })
             except: continue
 
         current = spread_series[-1] if spread_series else {}
@@ -379,17 +384,18 @@ def get_real_yields():
 
         for date in common:
             try:
-                tip_p = float(hist_tip.loc[date, 'Close'])
-                ief_p = float(hist_ief.loc[date, 'Close'])
+                tip_p = clean(hist_tip.loc[date, 'Close'])
+                ief_p = clean(hist_ief.loc[date, 'Close'])
 
-                # TIP/IEF ratio as proxy for real yield trend
-                ratio = ief_p / tip_p if tip_p > 0 else 0
-                real_yield_history.append({
-                    "date": date.strftime('%Y-%m-%d'),
-                    "tip_price": round(tip_p, 2),
-                    "ief_price": round(ief_p, 2),
-                    "tip_ief_ratio": round(ratio, 4)
-                })
+                if tip_p and ief_p:
+                    # TIP/IEF ratio as proxy for real yield trend
+                    ratio = ief_p / tip_p if tip_p > 0 else 0
+                    real_yield_history.append({
+                        "date": date.strftime('%Y-%m-%d'),
+                        "tip_price": round(tip_p, 2),
+                        "ief_price": round(ief_p, 2),
+                        "tip_ief_ratio": round(ratio, 4)
+                    })
             except: continue
 
         result = {
@@ -497,12 +503,12 @@ def get_ticker_detail(symbol: str):
             "dayLow": clean(info.get("dayLow") or info.get("regularMarketDayLow")),
             "high52w": clean(info.get("fiftyTwoWeekHigh")),
             "low52w": clean(info.get("fiftyTwoWeekLow")),
-            "volume": info.get("regularMarketVolume"),
-            "avgVolume": info.get("averageVolume"),
-            "marketCap": info.get("marketCap"),
-            "dividendYield": info.get("dividendYield") or info.get("yield"),
-            "peRatio": info.get("trailingPE"),
-            "beta": info.get("beta"),
+            "volume": clean(info.get("regularMarketVolume")),
+            "avgVolume": clean(info.get("averageVolume")),
+            "marketCap": clean(info.get("marketCap")),
+            "dividendYield": clean(info.get("dividendYield") or info.get("yield")),
+            "peRatio": clean(info.get("trailingPE")),
+            "beta": clean(info.get("beta")),
             "category": info.get("category") or info.get("fundFamily"),
             "history": history[-120:],  # Last 120 trading days
             "last_updated": int(time.time()),
