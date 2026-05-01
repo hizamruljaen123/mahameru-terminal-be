@@ -455,6 +455,67 @@ def get_bond_summary():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/bonds/ticker-detail/{symbol}")
+def get_ticker_detail(symbol: str):
+    """Fetch full ticker detail and price history for any yfinance symbol.
+    
+    Returns current price, 52w high/low, and 6-month daily OHLCV history.
+    Used by the Bond Detail Explorer in the frontend.
+    """
+    cache_key = f"ticker_detail_{symbol}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return {"status": "success", "data": cached}
+
+    try:
+        t = yf.Ticker(symbol)
+        info = t.info
+
+        # 6-month daily history
+        hist = t.history(period="6mo")
+        history = []
+        if not hist.empty:
+            for ts, row in hist.iterrows():
+                history.append({
+                    "date": ts.strftime('%Y-%m-%d'),
+                    "open": clean(row.get('Open')),
+                    "high": clean(row.get('High')),
+                    "low": clean(row.get('Low')),
+                    "close": clean(row.get('Close')),
+                    "volume": int(row.get('Volume', 0)) if not np.isnan(row.get('Volume', 0)) else 0,
+                    "adjclose": clean(row.get('Adj Close', row.get('Close'))),
+                })
+
+        detail = {
+            "symbol": symbol,
+            "name": info.get("shortName") or info.get("longName") or symbol,
+            "currency": info.get("currency", "USD"),
+            "currentPrice": clean(info.get("regularMarketPrice") or info.get("previousClose") or info.get("navPrice")),
+            "previousClose": clean(info.get("previousClose")),
+            "open": clean(info.get("regularMarketOpen")),
+            "dayHigh": clean(info.get("dayHigh") or info.get("regularMarketDayHigh")),
+            "dayLow": clean(info.get("dayLow") or info.get("regularMarketDayLow")),
+            "high52w": clean(info.get("fiftyTwoWeekHigh")),
+            "low52w": clean(info.get("fiftyTwoWeekLow")),
+            "volume": info.get("regularMarketVolume"),
+            "avgVolume": info.get("averageVolume"),
+            "marketCap": info.get("marketCap"),
+            "dividendYield": info.get("dividendYield") or info.get("yield"),
+            "peRatio": info.get("trailingPE"),
+            "beta": info.get("beta"),
+            "category": info.get("category") or info.get("fundFamily"),
+            "history": history[-120:],  # Last 120 trading days
+            "last_updated": int(time.time()),
+        }
+
+        _set_cached(cache_key, detail)
+        return {"status": "success", "data": detail}
+    except Exception as e:
+        log.warning(f"TICKER_DETAIL[{symbol}]: {e}")
+        # Return minimal data with just the symbol
+        return {"status": "error", "detail": str(e), "data": {"symbol": symbol}}
+
+
 # ===================== HEALTH =====================
 
 @app.get("/health")
