@@ -213,7 +213,7 @@ def search_entity():
 def get_entity_profile(symbol):
     normalized_symbol = normalize_symbol(symbol)
     ticker = yf.Ticker(normalized_symbol)
-    period = request.args.get('period', '1mo')
+    period = request.args.get('period', '6mo')
     
     try:
         info = ticker.info or {}
