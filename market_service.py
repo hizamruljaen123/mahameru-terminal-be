@@ -28,21 +28,36 @@ app.add_middleware(
 
 WATCHLIST_CONFIG = {
     "indices": [
-      {"symbol": "^GSPC", "name": "S&P 500", "country": "USA"},
-      {"symbol": "^NDX", "name": "Nasdaq 100", "country": "USA"},
+      {"symbol": "^JKSE", "name": "IDX Composite", "country": "Indonesia"},
+      {"symbol": "^STI", "name": "STI Index", "country": "Singapore"},
+      {"symbol": "^KLSE", "name": "FTSE Bursa Malaysia KLCI", "country": "Malaysia"},
+      {"symbol": "PSEI.PS", "name": "PSEi Index", "country": "Philippines"},
       {"symbol": "^N225", "name": "Nikkei 225", "country": "Japan"},
+      {"symbol": "^HSI", "name": "Hang Seng Index", "country": "Hong Kong"},
+      {"symbol": "^KS11", "name": "KOSPI Composite", "country": "South Korea"},
+      {"symbol": "000001.SS", "name": "SSE Composite", "country": "China"},
+      {"symbol": "^BSESN", "name": "S&P BSE Sensex", "country": "India"},
+      {"symbol": "^GSPC", "name": "S&P 500", "country": "USA"},
+      {"symbol": "^DJI", "name": "Dow Jones Industrial Average", "country": "USA"},
+      {"symbol": "^IXIC", "name": "NASDAQ Composite", "country": "USA"},
+      {"symbol": "^RUT", "name": "Russell 2000", "country": "USA"},
       {"symbol": "^FTSE", "name": "FTSE 100", "country": "UK"},
       {"symbol": "^GDAXI", "name": "DAX Performance Index", "country": "Germany"},
-      {"symbol": "^HSI", "name": "Hang Seng Index", "country": "Hong Kong"},
-      {"symbol": "000001.SS", "name": "SSE Composite", "country": "China"},
-      {"symbol": "^JKSE", "name": "IHSG", "country": "Indonesia"}
+      {"symbol": "^FCHI", "name": "CAC 40", "country": "France"},
+      {"symbol": "^STOXX50E", "name": "Euro Stoxx 50", "country": "EU"},
+      {"symbol": "^N100", "name": "Euronext 100", "country": "EU"},
+      {"symbol": "^NYA", "name": "NYSE Composite", "country": "USA"},
+      {"symbol": "^XAX", "name": "NYSE AMEX Composite", "country": "USA"},
+      {"symbol": "^AXJO", "name": "S&P/ASX 200", "country": "Australia"}
     ],
     "cryptocurrency": [
       {"symbol": "BTC-USD", "name": "Bitcoin"},
       {"symbol": "ETH-USD", "name": "Ethereum"},
       {"symbol": "SOL-USD", "name": "Solana"},
       {"symbol": "BNB-USD", "name": "Binance Coin"},
-      {"symbol": "XRP-USD", "name": "Ripple"}
+      {"symbol": "XRP-USD", "name": "Ripple"},
+      {"symbol": "ADA-USD", "name": "Cardano"},
+      {"symbol": "AVAX-USD", "name": "Avalanche"}
     ],
     "commodities": [
       {"symbol": "GC=F", "name": "Gold"},
@@ -50,21 +65,24 @@ WATCHLIST_CONFIG = {
       {"symbol": "CL=F", "name": "Crude Oil WTI"},
       {"symbol": "BZ=F", "name": "Brent Crude Oil"},
       {"symbol": "HG=F", "name": "Copper"},
-      {"symbol": "NG=F", "name": "Natural Gas"}
+      {"symbol": "NG=F", "name": "Natural Gas"},
+      {"symbol": "PA=F", "name": "Palladium"}
     ],
     "forex": [
       {"symbol": "EURUSD=X", "name": "EUR/USD"},
       {"symbol": "JPY=X", "name": "USD/JPY"},
       {"symbol": "GBPUSD=X", "name": "GBP/USD"},
       {"symbol": "AUDUSD=X", "name": "AUD/USD"},
-      {"symbol": "USDIDR=X", "name": "USD/IDR"}  # Fixed: was IDR=X
+      {"symbol": "USDIDR=X", "name": "USD/IDR"},
+      {"symbol": "SGDIDR=X", "name": "SGD/IDR"}
     ],
     "blue_chips_global": [
       {"symbol": "NVDA", "name": "NVIDIA Corporation"},
       {"symbol": "AAPL", "name": "Apple Inc."},
       {"symbol": "MSFT", "name": "Microsoft Corporation"},
       {"symbol": "GOOGL", "name": "Alphabet Inc."},
-      {"symbol": "AMZN", "name": "Amazon.com Inc."}
+      {"symbol": "AMZN", "name": "Amazon.com Inc."},
+      {"symbol": "TSLA", "name": "Tesla, Inc."}
     ],
     "blue_chips_indonesia": [
       {"symbol": "BBCA.JK", "name": "Bank Central Asia Tbk."},
@@ -72,7 +90,8 @@ WATCHLIST_CONFIG = {
       {"symbol": "TLKM.JK", "name": "Telkom Indonesia Tbk."},
       {"symbol": "BMRI.JK", "name": "Bank Mandiri Tbk."},
       {"symbol": "ASII.JK", "name": "Astra International Tbk."},
-      {"symbol": "ICBP.JK", "name": "Indofood CBP Sukses Makmur Tbk."}
+      {"symbol": "ICBP.JK", "name": "Indofood CBP Sukses Makmur Tbk."},
+      {"symbol": "GOTO.JK", "name": "GoTo Gojek Tokopedia Tbk."}
     ]
 }
 
