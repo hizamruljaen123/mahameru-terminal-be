@@ -524,86 +524,9 @@ def update_news_cache_loop(assigned_categories=None):
 # API ROUTES
 # ============================================================
 
-@app.route('/api/news/data', methods=['GET'])
-def get_current_data():
-    """
-    Retrieve fast status metadata AND hot category news.
-    Optimization: Added in-memory caching to avoid repeated SQLite/MySQL hits.
-    """
-    global API_DATA_CACHE, API_CACHE_TIME
-    
-    now = time.time()
-    with cache_lock:
-        if API_DATA_CACHE and (now - API_CACHE_TIME < API_CACHE_TTL):
-            return jsonify(API_DATA_CACHE)
+# Route /api/news/data removed to prevent timeouts. 
+# Use /api/news/stream-categories for sequential/progressive loading.
 
-    current_status = cache_manager.get_status_cache()
-    
-    # 1. Fast path: load category news from hot cache (SQLite)
-    # Optimization: get_hot_news is now limited to 1000 items
-    hot = cache_manager.get_hot_news(limit=1200)
-    
-    categorized_news = {}
-    missing_cats = []
-    
-    # Pre-calculate upper categories to avoid repeated .upper() calls
-    for cat in PRIORITY_CATEGORIES:
-        cat_upper = cat.upper()
-        items = hot.get(cat_upper)
-        if items:
-            categorized_news[cat_upper] = items[:15]
-        else:
-            missing_cats.append(cat_upper)
-            
-    # 2. Fallback to MySQL for missing categories 
-    # Optimization: Limit MySQL fallback to max 10 missing categories per request 
-    # to prevent heavy PARTITION BY queries from blocking the worker.
-    if missing_cats and len(missing_cats) < 20:
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            placeholders = ', '.join(['%s'] * len(missing_cats))
-            query = f"""
-                SELECT id, title, link, description, pubDate as timestamp,
-                       sourceName as source, imageUrl, category, sentiment, sentimentScore, impactScore
-                FROM article 
-                WHERE UPPER(category) IN ({placeholders})
-                ORDER BY pubDate DESC LIMIT 150
-            """
-            cursor.execute(query, tuple(missing_cats))
-            rows = cursor.fetchall()
-            
-            for row in rows:
-                cat_upper = (row.get('category') or 'UNCATEGORIZED').upper()
-                if cat_upper not in categorized_news:
-                    categorized_news[cat_upper] = []
-                
-                if len(categorized_news[cat_upper]) < 15:
-                    if hasattr(row.get('timestamp'), 'timestamp'):
-                        row['timestamp'] = row['timestamp'].timestamp()
-                    categorized_news[cat_upper].append(row)
-                
-            cursor.close()
-            conn.close()
-        except Exception as e:
-            log.error(f"Fallback DB query in /api/news/data failed: {e}")
-        
-    new_count = cache_manager.get_new_items_count()
-    cache_manager.reset_new_items_count()
-    
-    response_data = {
-        "news": categorized_news, 
-        "status": current_status,
-        "new_count": new_count,
-        "timestamp": now
-    }
-    
-    with cache_lock:
-        API_DATA_CACHE = response_data
-        API_CACHE_TIME = now
-        
-    return jsonify(response_data)
 
 
 @app.route('/api/news/search', methods=['GET'])
