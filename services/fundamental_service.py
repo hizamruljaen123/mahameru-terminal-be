@@ -89,6 +89,7 @@ def get_fundamental_data(symbol):
         "currency": info.get("currency", "USD"),
         "country": info.get("country", "N/A"),
         "website": info.get("website", ""),
+        "longBusinessSummary": info.get("longBusinessSummary", ""),
         "fullTimeEmployees": clean_data(info.get("fullTimeEmployees")),
         "marketCap": clean_data(info.get("marketCap")),
         "enterpriseValue": clean_data(info.get("enterpriseValue")),
