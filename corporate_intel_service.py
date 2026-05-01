@@ -213,6 +213,67 @@ def get_insider_signals():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/corporate/insider")
+def get_insider_summary_all():
+    """Aggregate insider trading for the entire watchlist as expected by the frontend."""
+    cached = _get_cached("insider_all")
+    if cached: return {"status": "success", "data": cached}
+
+    try:
+        all_trades = []
+        total_buys = 0
+        total_sells = 0
+        
+        for symbol in WATCHLIST[:15]: # Limit for performance
+            try:
+                t = yf.Ticker(symbol)
+                df = t.insider_transactions
+                if df is not None and not df.empty:
+                    for _, row in df.head(5).iterrows():
+                        transaction = str(row.get('Transaction', ''))
+                        is_buy = 'Purchase' in transaction or 'Buy' in transaction
+                        is_sell = 'Sale' in transaction or 'Sell' in transaction
+                        
+                        trade = {
+                            "symbol": symbol,
+                            "insider_name": str(row.get('Insider', 'Unknown')),
+                            "transaction_type": "Buy" if is_buy else "Sell" if is_sell else transaction,
+                            "price": clean(row.get('Price')),
+                            "shares": clean(row.get('Quantity')),
+                            "filing_date": row.get('Start Date').strftime('%Y-%m-%d') if hasattr(row.get('Start Date'), 'strftime') else str(row.get('Start Date')),
+                            "percent_holding": clean(row.get('Ownership'))
+                        }
+                        all_trades.append(trade)
+                        if is_buy: total_buys += 1
+                        if is_sell: total_sells += 1
+            except:
+                continue
+
+        # Sort by date
+        all_trades.sort(key=lambda x: x.get('filing_date', ''), reverse=True)
+
+        result = {
+            "trades": all_trades[:50],
+            "summary": {
+                "total": len(all_trades),
+                "buys": total_buys,
+                "sells": total_sells,
+                "buy_sell_ratio": total_buys / (total_sells if total_sells > 0 else 1),
+                "history": [] # Placeholder for chart if needed
+            }
+        }
+        _set_cached("insider_all", result)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/corporate/analyst")
+def get_analyst_changes_fe():
+    """Alias for analyst-changes returning the flat list expected by frontend."""
+    res = get_analyst_changes()
+    return {"status": "success", "data": res.get("data", {}).get("recent_changes", [])}
+
 @app.get("/api/corporate/analyst-changes")
 def get_analyst_changes():
     """Recent analyst upgrades/downgrades for watchlist symbols."""
@@ -236,15 +297,18 @@ def get_analyst_changes():
                 if recs is not None and not recs.empty:
                     # Get latest 5 recommendations
                     for _, row in recs.head(5).iterrows():
-                        entry = {}
-                        for col in recs.columns:
-                            val = row[col]
-                            if isinstance(val, pd.Timestamp):
-                                entry[col] = val.strftime('%Y-%m-%d')
-                            else:
-                                entry[col] = str(val) if val is not None else None
-                        entry['symbol'] = symbol
-                        entry['company'] = info.get('shortName', symbol)
+                        entry = {
+                            "date": row.name.strftime('%Y-%m-%d') if hasattr(row.name, 'strftime') else str(row.name),
+                            "symbol": symbol,
+                            "company": info.get('shortName', symbol),
+                            "firm": row.get('Firm'),
+                            "to_rating": row.get('To Grade'),
+                            "from_rating": row.get('From Grade'),
+                            "action": row.get('Action'),
+                            "pt_new": None, # yf recommendations don't usually have these
+                            "pt_old": None,
+                            "upside": None
+                        }
                         changes.append(entry)
 
             except Exception as e:
@@ -261,6 +325,12 @@ def get_analyst_changes():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/api/corporate/earnings")
+def get_earnings_calendar_fe():
+    """Alias for earnings-calendar returning the flat list expected by frontend."""
+    res = get_earnings_calendar()
+    return {"status": "success", "data": res.get("data", {}).get("upcoming_earnings", [])}
 
 @app.get("/api/corporate/earnings-calendar")
 def get_earnings_calendar():
@@ -290,11 +360,16 @@ def get_earnings_calendar():
 
                     if earnings_date:
                         events.append({
+                            "date": str(earnings_date) if earnings_date else None,
                             "symbol": symbol,
                             "company": info.get('shortName', symbol),
-                            "earnings_date": str(earnings_date) if earnings_date else None,
-                            "eps_estimate": clean(eps_estimate),
-                            "eps_actual": clean(eps_actual),
+                            "quarter": None,
+                            "est_eps": clean(eps_estimate),
+                            "actual_eps": clean(eps_actual),
+                            "est_revenue": None,
+                            "prior_eps": None,
+                            "surprise_pct": None,
+                            "time": "N/A",
                             "market_cap": clean(info.get('marketCap')),
                             "sector": info.get('sector', 'N/A')
                         })
@@ -302,15 +377,12 @@ def get_earnings_calendar():
                 log.warning(f"EARNINGS[{symbol}]: {e}")
                 continue
 
-        # Sort by date
-        events.sort(key=lambda x: x.get('earnings_date') or '9999-12-31')
-
         # Upcoming only
-        upcoming = [e for e in events if e.get('earnings_date', '') >= today.strftime('%Y-%m-%d')]
+        upcoming = [e for e in events if e.get('date', '') >= today.strftime('%Y-%m-%d')]
 
         result = {
             "upcoming_earnings": upcoming[:30],
-            "recent_earnings": [e for e in events if e.get('earnings_date', '') < today.strftime('%Y-%m-%d')][:10],
+            "recent_earnings": [e for e in events if e.get('date', '') < today.strftime('%Y-%m-%d')][:10],
             "total_upcoming": len(upcoming),
             "last_updated": int(time.time())
         }
@@ -319,6 +391,12 @@ def get_earnings_calendar():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/api/corporate/dividends")
+def get_dividend_calendar_fe():
+    """Alias for dividend-calendar returning the flat list expected by frontend."""
+    res = get_dividend_calendar()
+    return {"status": "success", "data": res.get("data", {}).get("dividends", [])}
 
 @app.get("/api/corporate/dividend-calendar")
 def get_dividend_calendar():
@@ -356,12 +434,14 @@ def get_dividend_calendar():
 
                 if div_rate or div_yield:
                     dividends.append({
+                        "ex_date": ex_date,
                         "symbol": symbol,
                         "company": info.get('shortName', symbol),
-                        "dividend_rate": div_rate,
-                        "dividend_yield": (div_yield * 100) if div_yield else None,
-                        "ex_dividend_date": ex_date,
-                        "last_dividend": last_div,
+                        "dividend": div_rate,
+                        "yield": (div_yield * 100) if div_yield else None,
+                        "frequency": info.get('dividendYield', 'N/A'), # Placeholder
+                        "pay_date": None,
+                        "record_date": None,
                         "payout_ratio": clean(info.get('payoutRatio')),
                         "sector": info.get('sector', 'N/A')
                     })
