@@ -1082,6 +1082,187 @@ async def get_sector_detail(sector_key: str, refresh: bool = False):
         return {"status": "error", "message": str(e)}
 
 
+# ============================================================================
+# 2.1 SECTOR ROTATION UPGRADE — Sector/Factor Rotation Ranking
+# ============================================================================
+
+# Sector ETFs for rotation analysis
+SECTOR_ROTATION_ETFS = {
+    "XLK": "Technology",
+    "XLC": "Communication",
+    "XLY": "Consumer Cyclical",
+    "XLP": "Consumer Defensive",
+    "XLE": "Energy",
+    "XLF": "Financials",
+    "XLV": "Healthcare",
+    "XLI": "Industrials",
+    "XLB": "Materials",
+    "XLRE": "Real Estate",
+    "XLU": "Utilities",
+    "SMH": "Semiconductors",
+    "IBB": "Biotechnology",
+    "KRE": "Regional Banks",
+    "KBE": "Banking",
+    "XRT": "Retail",
+    "ITB": "Home Construction",
+    "IYR": "Real Estate Broad",
+    "GLD": "Gold Miners Proxy",
+    "SLV": "Silver Proxy"
+}
+
+# Factor proxy ETFs — represent different investment factors
+FACTOR_ETFS = {
+    "MTUM": "Momentum",
+    "QUAL": "Quality",
+    "SIZE": "Size (Small Cap)",
+    "USMV": "Low Volatility",
+    "VLUE": "Value",
+    "SPYG": "Growth",
+    "SPYV": "Value (S&P 500)",
+    "IVE": "S&P 500 Value",
+    "IVW": "S&P 500 Growth",
+    "DVY": "Dividend Yield",
+    "PFF": "Preferred Stock",
+    "TAN": "Solar Energy",
+    "ARKK": "Disruptive Innovation",
+    "XBI": "Biotech (Small Cap)",
+    "HYG": "High Yield (Risk On/Off)"
+}
+
+ROTATION_CACHE = {}
+ROTATION_CACHE_TTL = 900  # 15 minutes
+
+def _get_rotation_cache(key):
+    entry = ROTATION_CACHE.get(key)
+    if entry and time.time() - entry['ts'] < ROTATION_CACHE_TTL:
+        return entry['data']
+    return None
+
+def _set_rotation_cache(key, data):
+    ROTATION_CACHE[key] = {'ts': time.time(), 'data': data}
+
+@app.get("/api/market/sector-rotation")
+async def get_sector_rotation():
+    """Rank sectors by momentum (1m, 3m, 6m performance). Returns rotation table."""
+    try:
+        cached = _get_rotation_cache("sector_rotation")
+        if cached:
+            return {"status": "success", "data": cached, "cached": True}
+
+        loop = asyncio.get_event_loop()
+
+        def _fetch_rotation():
+            results = []
+            for ticker, sector_name in SECTOR_ROTATION_ETFS.items():
+                try:
+                    tk = yf.Ticker(ticker)
+                    hist = tk.history(period="6mo")
+                    if hist.empty or len(hist) < 5:
+                        continue
+
+                    current_price = hist['Close'].iloc[-1]
+                    prices = hist['Close']
+
+                    # 1-month: last 21 trading days
+                    p1m = prices.iloc[-21] if len(prices) >= 21 else prices.iloc[0]
+                    perf_1m = ((current_price / p1m) - 1) * 100
+
+                    # 3-month: last 63 trading days
+                    p3m = prices.iloc[-63] if len(prices) >= 63 else prices.iloc[0]
+                    perf_3m = ((current_price / p3m) - 1) * 100
+
+                    # 6-month: full period
+                    perf_6m = ((current_price / prices.iloc[0]) - 1) * 100
+
+                    # Momentum score: weighted combination (recent matters more)
+                    momentum_score = perf_1m * 0.5 + perf_3m * 0.3 + perf_6m * 0.2
+
+                    results.append({
+                        "ticker": ticker,
+                        "sector": sector_name,
+                        "perf_1m": round(perf_1m, 2),
+                        "perf_3m": round(perf_3m, 2),
+                        "perf_6m": round(perf_6m, 2),
+                        "momentum_score": round(momentum_score, 2),
+                        "current_price": round(float(current_price), 2)
+                    })
+                except:
+                    continue
+                time.sleep(0.1)
+
+            # Rank by momentum score descending
+            results.sort(key=lambda x: x['momentum_score'], reverse=True)
+            for i, r in enumerate(results):
+                r['rank'] = i + 1
+
+            return results
+
+        data = await loop.run_in_executor(None, _fetch_rotation)
+        _set_rotation_cache("sector_rotation", data)
+        return {"status": "success", "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/market/factor-rotation")
+async def get_factor_rotation():
+    """Rank investment factors by recent performance. Helps identify style rotation."""
+    try:
+        cached = _get_rotation_cache("factor_rotation")
+        if cached:
+            return {"status": "success", "data": cached, "cached": True}
+
+        loop = asyncio.get_event_loop()
+
+        def _fetch_factors():
+            results = []
+            for ticker, factor_name in FACTOR_ETFS.items():
+                try:
+                    tk = yf.Ticker(ticker)
+                    hist = tk.history(period="3mo")
+                    if hist.empty or len(hist) < 5:
+                        continue
+
+                    current_price = hist['Close'].iloc[-1]
+                    prices = hist['Close']
+
+                    # 1-month performance
+                    p1m = prices.iloc[-21] if len(prices) >= 21 else prices.iloc[0]
+                    perf_1m = ((current_price / p1m) - 1) * 100
+
+                    # Full period
+                    perf_total = ((current_price / prices.iloc[0]) - 1) * 100
+
+                    # Volatility (daily returns std dev)
+                    daily_returns = prices.pct_change().dropna()
+                    volatility = float(daily_returns.std() * 100)  # daily vol %
+
+                    results.append({
+                        "ticker": ticker,
+                        "factor": factor_name,
+                        "perf_1m": round(perf_1m, 2),
+                        "perf_total": round(perf_total, 2),
+                        "daily_vol_pct": round(volatility, 2),
+                        "current_price": round(float(current_price), 2)
+                    })
+                except:
+                    continue
+                time.sleep(0.1)
+
+            # Rank by 1-month performance descending
+            results.sort(key=lambda x: x['perf_1m'], reverse=True)
+            for i, r in enumerate(results):
+                r['rank'] = i + 1
+
+            return results
+
+        data = await loop.run_in_executor(None, _fetch_factors)
+        _set_rotation_cache("factor_rotation", data)
+        return {"status": "success", "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/")
 def root():
     return {"status": "online", "service": "market_service"}

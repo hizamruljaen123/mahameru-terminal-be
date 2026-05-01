@@ -793,6 +793,422 @@ def analyze_compare():
     return Response(generate(), mimetype='text/event-stream',
                     headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache'})
 
+# ============================================================================
+# 3.4 AI NARRATIVE ANALYSIS UPGRADE
+# Market Narrative Extraction, Morning Briefing, Anomaly Detection
+# ============================================================================
+
+NARRATIVE_SYSTEM_PROMPT = """You are a Senior Market Narrative Analyst at Asetpedia Intelligence.
+Your task is to extract the dominant market narrative from the provided data context.
+Focus on:
+1. The single most important macro theme driving markets right now
+2. Key catalysts (earnings, data releases, geopolitical events)
+3. Market regime assessment (risk-on, risk-off, rotation)
+4. Sector-level implications
+5. What narratives are being priced in vs. ignored
+
+Be concise, data-driven, and avoid generic statements. Output in JSON format."""
+
+BRIEFING_SYSTEM_PROMPT = """You are an institutional morning briefing analyst. Create a concise pre-market briefing.
+Cover:
+1. Overnight market action (Asia, Europe, US futures)
+2. Key levels to watch (SPX, VIX, 10Y yield, DXY)
+3. Today's economic calendar highlights
+4. Sector rotation signals
+5. Geopolitical watch items
+
+Keep to 5-7 bullet points maximum. No fluff."""
+
+ANOMALY_SYSTEM_PROMPT = """You are an anomaly detection specialist. Analyze the provided time-series data
+and identify unusual patterns, divergences, or statistically significant events.
+Flag:
+1. Volume spikes vs 20-day average
+2. RSI divergences (price making new high but RSI lower)
+3. Unusual volatility expansion
+4. Gap fills and breakouts
+5. Correlation breakdowns with the broader market
+
+Output as structured JSON with anomaly type, severity (1-5), and description."""
+
+
+@app.route('/api/analyze/narrative', methods=['POST'])
+def analyze_market_narrative():
+    """
+    AI-powered market narrative extraction.
+    Accepts market data context and returns the dominant narrative.
+    """
+    data = request.json or {}
+    market_context = data.get('market_context', '')
+    api_key = data.get('api_key', '').strip() or os.environ.get('DEEPSEEK_API_KEY')
+    model = data.get('model', 'deepseek-chat').strip()
+
+    if not api_key:
+        return jsonify({"status": "error", "message": "API Key required."}), 400
+
+    try:
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+
+        prompt = f"""Extract the current market narrative from this context:
+
+{market_context}
+
+Respond with a JSON object containing:
+- primary_narrative: string (one sentence describing the main theme)
+- confidence: float (0-1 how confident you are in this assessment)
+- catalysts: list of strings (key events driving this narrative)
+- risk_factors: list of strings (what could break this narrative)
+- sector_implications: dict mapping sector names to "bullish"/"bearish"/"neutral"
+- regime: "RISK_ON" | "RISK_OFF" | "ROTATION" | "MIXED"
+"""
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": NARRATIVE_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=2000
+        )
+
+        content = response.choices[0].message.content
+
+        # Try to parse as JSON, fallback to raw text
+        try:
+            # Extract JSON from potential markdown code block
+            if '```json' in content:
+                json_str = content.split('```json')[1].split('```')[0].strip()
+            elif '```' in content:
+                json_str = content.split('```')[1].split('```')[0].strip()
+            else:
+                json_str = content
+            narrative = json.loads(json_str)
+        except:
+            narrative = {"raw_analysis": content}
+
+        return jsonify({"status": "success", "data": narrative, "model": model})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/analyze/morning-briefing', methods=['GET'])
+def get_morning_briefing():
+    """
+    AI-generated pre-market briefing using live market data + yfinance.
+    Requires DEEPSEEK_API_KEY environment variable.
+    """
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        return jsonify({"status": "error", "message": "DeepSeek API Key not configured on server."}), 400
+
+    model = request.args.get('model', 'deepseek-chat').strip()
+
+    try:
+        # Gather pre-market data
+        tickers = {
+            "SPY": "S&P 500",
+            "QQQ": "Nasdaq",
+            "DIA": "Dow Jones",
+            "IWM": "Russell 2000",
+            "^VIX": "VIX",
+            "^TNX": "10Y Yield",
+            "DX-Y.NYB": "DXY",
+            "GC=F": "Gold",
+            "CL=F": "Crude Oil",
+            "BTC-USD": "Bitcoin"
+        }
+
+        market_snapshot = {}
+        for sym, name in tickers.items():
+            try:
+                tk = yf.Ticker(sym)
+                info = tk.info
+                price = info.get("regularMarketPrice") or info.get("previousClose")
+                chg = info.get("regularMarketChangePercent", 0)
+                if price:
+                    market_snapshot[name] = {
+                        "price": float(price),
+                        "change_pct": float(chg or 0)
+                    }
+            except:
+                continue
+
+        # Check for today's economic events (simplified — from yfinance calendar)
+        today_events = []
+        try:
+            spy = yf.Ticker("SPY")
+            cal = spy.calendar
+            if cal:
+                today_events = [{"date": str(k)[:10], "event": str(v)} for k, v in cal.items()]
+        except:
+            pass
+
+        context = f"""Pre-Market Data Snapshot:
+{json.dumps(market_snapshot, indent=2)}
+
+Economic Calendar:
+{json.dumps(today_events[:5], indent=2)}
+
+Generate a concise pre-market briefing.
+"""
+
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": BRIEFING_SYSTEM_PROMPT},
+                {"role": "user", "content": context}
+            ],
+            temperature=0.3,
+            max_tokens=1500
+        )
+
+        briefing = response.choices[0].message.content
+
+        return jsonify({
+            "status": "success",
+            "data": {
+                "briefing": briefing,
+                "market_snapshot": market_snapshot,
+                "timestamp": time.time()
+            },
+            "model": model
+        })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/analyze/anomaly', methods=['POST'])
+def detect_anomalies():
+    """
+    AI-powered anomaly detection on price time-series.
+    Accepts historical price data and returns detected anomalies.
+    """
+    data = request.json or {}
+    symbol = data.get('symbol', '').strip().upper()
+    api_key = data.get('api_key', '').strip() or os.environ.get('DEEPSEEK_API_KEY')
+    model = data.get('model', 'deepseek-chat').strip()
+    price_data = data.get('price_data', [])
+
+    if not symbol and not price_data:
+        return jsonify({"status": "error", "message": "symbol or price_data required."}), 400
+
+    try:
+        # Fetch price data if only symbol provided
+        if not price_data:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="3mo")
+            if hist.empty:
+                return jsonify({"status": "error", "message": "No price data found."}), 404
+
+            price_data = []
+            for ts, row in hist.iterrows():
+                price_data.append({
+                    "date": str(ts.date()),
+                    "open": clean_data(row.get("Open")),
+                    "high": clean_data(row.get("High")),
+                    "low": clean_data(row.get("Low")),
+                    "close": clean_data(row.get("Close")),
+                    "volume": int(row.get("Volume")) if pd.notna(row.get("Volume")) else 0
+                })
+
+        # Compute basic technical indicators
+        closes = [p["close"] for p in price_data if p.get("close")]
+        volumes = [p["volume"] for p in price_data if p.get("volume")]
+
+        technical_context = ""
+        if len(closes) > 20:
+            import numpy as np
+            arr = np.array(closes)
+            vol_arr = np.array(volumes)
+
+            # RSI
+            deltas = np.diff(arr)
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
+            avg_gain = np.mean(gains[-14:]) if len(gains) >= 14 else np.mean(gains)
+            avg_loss = np.mean(losses[-14:]) if len(losses) >= 14 else np.mean(losses)
+            rsi = 50 if avg_loss == 0 else round(100 - (100 / (1 + avg_gain / avg_loss)), 2)
+
+            # Volume spike
+            avg_vol = np.mean(vol_arr[-20:]) if len(vol_arr) >= 20 else np.mean(vol_arr)
+            last_vol = vol_arr[-1] if len(vol_arr) > 0 else 0
+            vol_ratio = round(last_vol / avg_vol, 2) if avg_vol > 0 else 0
+
+            # Volatility
+            daily_returns = np.diff(arr) / arr[:-1]
+            volatility = float(np.std(daily_returns[-20:]) * 100) if len(daily_returns) >= 20 else 0
+
+            technical_context = f"""
+Technical Indicators (computed):
+- Current Price: {closes[-1]:.2f}
+- RSI(14): {rsi}
+- Volume Ratio (last/avg20): {vol_ratio}x
+- 20-day Volatility: {volatility:.2f}%
+- 20d MA: {np.mean(arr[-20:]):.2f}
+"""
+
+        if api_key and model:
+            # Use AI for sophisticated analysis
+            context = f"""Symbol: {symbol}
+Number of data points: {len(price_data)}
+Price Range: {min(closes):.2f} - {max(closes):.2f}
+{technical_context}
+
+Analyze this data for anomalies.
+"""
+
+            client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": ANOMALY_SYSTEM_PROMPT},
+                    {"role": "user", "content": context}
+                ],
+                temperature=0.2,
+                max_tokens=2000
+            )
+
+            content = response.choices[0].message.content
+
+            try:
+                if '```json' in content:
+                    json_str = content.split('```json')[1].split('```')[0].strip()
+                elif '```' in content:
+                    json_str = content.split('```')[1].split('```')[0].strip()
+                else:
+                    json_str = content
+                anomalies = json.loads(json_str)
+            except:
+                anomalies = {"raw_analysis": content}
+
+            return jsonify({
+                "status": "success",
+                "data": {
+                    "anomalies": anomalies,
+                    "technical_context": technical_context,
+                    "symbol": symbol
+                },
+                "model": model
+            })
+        else:
+            # Rule-based fallback
+            anomalies = []
+            if len(closes) > 20:
+                arr = np.array(closes)
+                vol_arr = np.array(volumes)
+
+                # Volume anomaly
+                avg_vol = np.mean(vol_arr[-20:])
+                last_vol = vol_arr[-1]
+                if avg_vol > 0 and last_vol > avg_vol * 3:
+                    anomalies.append({
+                        "type": "VOLUME_SPIKE",
+                        "severity": 4,
+                        "description": f"Volume is {last_vol/avg_vol:.1f}x the 20-day average"
+                    })
+
+                # Price deviation from MA
+                ma20 = np.mean(arr[-20:])
+                last_price = arr[-1]
+                deviation = abs(last_price - ma20) / ma20 * 100
+                if deviation > 10:
+                    anomalies.append({
+                        "type": "PRICE_EXTENSION",
+                        "severity": 3,
+                        "description": f"Price is {deviation:.1f}% away from 20-day MA"
+                    })
+
+            return jsonify({
+                "status": "success",
+                "data": {
+                    "anomalies": anomalies if anomalies else [{"type": "NONE", "severity": 0, "description": "No significant anomalies detected"}],
+                    "technical_context": technical_context,
+                    "symbol": symbol
+                }
+            })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/analyze/sector-narrative', methods=['GET'])
+def get_sector_narrative():
+    """
+    Brief narrative summary for each major sector using yfinance performance data.
+    No AI required — data-driven sector narrative.
+    """
+    try:
+        sectors = {
+            "XLK": "Technology", "XLC": "Communication", "XLY": "Consumer Cyclical",
+            "XLP": "Consumer Defensive", "XLE": "Energy", "XLF": "Financials",
+            "XLV": "Healthcare", "XLI": "Industrials", "XLB": "Materials",
+            "XLRE": "Real Estate", "XLU": "Utilities"
+        }
+
+        narratives = []
+        for ticker, name in sectors.items():
+            try:
+                tk = yf.Ticker(ticker)
+                hist = tk.history(period="3mo")
+                if hist.empty or len(hist) < 5:
+                    continue
+
+                prices = hist['Close']
+                current = prices.iloc[-1]
+                p1m = prices.iloc[-21] if len(prices) >= 21 else prices.iloc[0]
+                p3m = prices.iloc[0]
+
+                perf_1m = ((current / p1m) - 1) * 100
+                perf_3m = ((current / p3m) - 1) * 100
+
+                # Determine momentum label
+                if perf_1m > 5:
+                    momentum = "STRONG_BULLISH"
+                elif perf_1m > 1:
+                    momentum = "BULLISH"
+                elif perf_1m > -1:
+                    momentum = "NEUTRAL"
+                elif perf_1m > -5:
+                    momentum = "BEARISH"
+                else:
+                    momentum = "STRONG_BEARISH"
+
+                narratives.append({
+                    "sector": name,
+                    "ticker": ticker,
+                    "perf_1m_pct": round(perf_1m, 2),
+                    "perf_3m_pct": round(perf_3m, 2),
+                    "momentum": momentum,
+                    "current_price": round(float(current), 2)
+                })
+            except:
+                continue
+            time.sleep(0.05)
+
+        narratives.sort(key=lambda x: x['perf_1m'], reverse=True)
+
+        # Determine leadership
+        leading = narratives[:3] if len(narratives) >= 3 else narratives
+        lagging = narratives[-3:] if len(narratives) >= 3 else narratives
+
+        return jsonify({
+            "status": "success",
+            "data": {
+                "sectors": narratives,
+                "leading_sectors": leading,
+                "lagging_sectors": lagging,
+                "timestamp": time.time()
+            }
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 if __name__ == '__main__':
     import sys
     port = 5202

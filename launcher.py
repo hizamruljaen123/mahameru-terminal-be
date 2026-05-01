@@ -77,6 +77,12 @@ TIER2 = [
     [PYTHON_EXE, get_p("government_facility_service.py")],# Port 8150
     [PYTHON_EXE, get_p("military_service.py")],        # Port 8160
     [PYTHON_EXE, get_p("crypto_stream_service.py")],   # Port 8092
+    # NEW TIER 2 SERVICES (OSINT Expansion)
+    [PYTHON_EXE, get_p("bond_service.py")],             # Port 8145
+    [PYTHON_EXE, get_p("volatility_service.py")],       # Port 8155
+    [PYTHON_EXE, get_p("options_service.py")],          # Port 8165
+    [PYTHON_EXE, get_p("capital_flow_service.py")],     # Port 8175
+    [PYTHON_EXE, get_p("corporate_intel_service.py")],  # Port 8185
 ]
 
 # TIER 3: Strategic Assets & Ops
@@ -87,6 +93,11 @@ TIER3 = [
     [PYTHON_EXE, get_p("gnews_service.py")],          # Port 5006
     [PYTHON_EXE, get_p("vessel_intelligence_service.py")], # Port 8100 — Phase 4/5 Signal Engine
     [PYTHON_EXE, get_p("price_intelligence_service.py")], # Port 8170
+    # NEW TIER 3 SERVICES (OSINT Expansion)
+    [PYTHON_EXE, get_p("regime_service.py")],          # Port 8195
+    [PYTHON_EXE, get_p("esg_service.py")],             # Port 8190
+    [PYTHON_EXE, get_p("macro_economics_service.py")], # Port 8205
+    [PYTHON_EXE, get_p("supply_chain_service.py")],    # Port 8210
 ]
 
 # TIER 4: DASHBOARD AGGREGATOR (Final Layer)
@@ -134,6 +145,18 @@ SERVICE_PORTS = {
     "crypto_stream_service.py": [8092],
     "entity_correlation_service.py": [8200],
     "dashboard_service.py": [8000],
+    # NEW TIER 1 SERVICES (OSINT Expansion)
+    "bond_service.py": [8145],
+    "volatility_service.py": [8155],
+    "options_service.py": [8165],
+    # NEW TIER 2 SERVICES
+    "capital_flow_service.py": [8175],
+    "corporate_intel_service.py": [8185],
+    # NEW TIER 3 SERVICES
+    "regime_service.py": [8195],
+    "esg_service.py": [8190],
+    "macro_economics_service.py": [8205],
+    "supply_chain_service.py": [8210],
     # Telegram handled by price_intelligence_service.py
 
 }

@@ -645,6 +645,144 @@ def process_geo(data):
     items.sort(key=lambda x: x.get("count", 0), reverse=True)
     return items[:8]
 
+# ============================================================================
+# 1.3 MACRO DASHBOARD ENHANCEMENT — Proxy endpoints to new microservices
+# ============================================================================
+
+# New microservice URLs
+MACRO_SERVICE_URL = os.getenv('MACRO_SERVICE_URL', 'http://localhost:8205')
+BOND_SERVICE_URL = os.getenv('BOND_SERVICE_URL', 'http://localhost:8145')
+VOLATILITY_SERVICE_URL = os.getenv('VOLATILITY_SERVICE_URL', 'http://localhost:8155')
+OPTIONS_SERVICE_URL = os.getenv('OPTIONS_SERVICE_URL', 'http://localhost:8165')
+CAPITAL_FLOW_URL = os.getenv('CAPITAL_FLOW_URL', 'http://localhost:8175')
+CORPORATE_INTEL_URL = os.getenv('CORPORATE_INTEL_URL', 'http://localhost:8185')
+REGIME_URL = os.getenv('REGIME_URL', 'http://localhost:8195')
+
+SERVICE_TIMEOUT = 8.0  # seconds per service call
+
+async def _proxy_fetch(client, url, timeout=SERVICE_TIMEOUT):
+    """Fetch from internal microservice with timeout."""
+    try:
+        resp = await client.get(url, timeout=timeout)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        print(f"[PROXY_ERROR] {url}: {e}")
+    return {"status": "error", "data": None, "message": str(e) if 'e' in dir() else "timeout"}
+
+
+@app.get("/api/dashboard/macro")
+async def dashboard_macro():
+    """Aggregate macro-economic indicators from macro_economics_service."""
+    async with httpx.AsyncClient() as client:
+        tasks = {
+            "indicators": _proxy_fetch(client, f"{MACRO_SERVICE_URL}/api/macro/indicators"),
+            "central_bank_rates": _proxy_fetch(client, f"{MACRO_SERVICE_URL}/api/macro/central-bank-rates"),
+            "inflation": _proxy_fetch(client, f"{MACRO_SERVICE_URL}/api/macro/inflation-dashboard"),
+            "labor": _proxy_fetch(client, f"{MACRO_SERVICE_URL}/api/macro/labor-market"),
+            "summary": _proxy_fetch(client, f"{MACRO_SERVICE_URL}/api/macro/summary"),
+        }
+        results = await asyncio.gather(*tasks.values())
+        mapped = dict(zip(tasks.keys(), results))
+        return {"status": "success", "data": mapped}
+
+
+@app.get("/api/dashboard/bonds")
+async def dashboard_bonds():
+    """Aggregate bond intelligence from bond_service."""
+    async with httpx.AsyncClient() as client:
+        tasks = {
+            "yield_curve": _proxy_fetch(client, f"{BOND_SERVICE_URL}/api/bonds/yield-curve"),
+            "global": _proxy_fetch(client, f"{BOND_SERVICE_URL}/api/bonds/global"),
+            "inversion": _proxy_fetch(client, f"{BOND_SERVICE_URL}/api/bonds/inversion-tracker"),
+            "credit_spreads": _proxy_fetch(client, f"{BOND_SERVICE_URL}/api/bonds/credit-spreads"),
+            "real_yields": _proxy_fetch(client, f"{BOND_SERVICE_URL}/api/bonds/real-yields"),
+            "summary": _proxy_fetch(client, f"{BOND_SERVICE_URL}/api/bonds/summary"),
+        }
+        results = await asyncio.gather(*tasks.values())
+        mapped = dict(zip(tasks.keys(), results))
+        return {"status": "success", "data": mapped}
+
+
+@app.get("/api/dashboard/volatility")
+async def dashboard_volatility():
+    """Aggregate volatility intelligence from volatility_service."""
+    async with httpx.AsyncClient() as client:
+        tasks = {
+            "vix": _proxy_fetch(client, f"{VOLATILITY_SERVICE_URL}/api/volatility/vix"),
+            "vix_term": _proxy_fetch(client, f"{VOLATILITY_SERVICE_URL}/api/volatility/vix-term-structure"),
+            "regime": _proxy_fetch(client, f"{VOLATILITY_SERVICE_URL}/api/volatility/regime"),
+            "cross_asset": _proxy_fetch(client, f"{VOLATILITY_SERVICE_URL}/api/volatility/cross-asset"),
+            "summary": _proxy_fetch(client, f"{VOLATILITY_SERVICE_URL}/api/volatility/summary"),
+        }
+        results = await asyncio.gather(*tasks.values())
+        mapped = dict(zip(tasks.keys(), results))
+        return {"status": "success", "data": mapped}
+
+
+@app.get("/api/dashboard/options")
+async def dashboard_options():
+    """Aggregate options intelligence from options_service."""
+    async with httpx.AsyncClient() as client:
+        tasks = {
+            "put_call_ratio": _proxy_fetch(client, f"{OPTIONS_SERVICE_URL}/api/options/put-call-ratio"),
+            "max_pain": _proxy_fetch(client, f"{OPTIONS_SERVICE_URL}/api/options/max-pain"),
+            "summary": _proxy_fetch(client, f"{OPTIONS_SERVICE_URL}/api/options/summary"),
+        }
+        results = await asyncio.gather(*tasks.values())
+        mapped = dict(zip(tasks.keys(), results))
+        return {"status": "success", "data": mapped}
+
+
+@app.get("/api/dashboard/capital-flows")
+async def dashboard_capital_flows():
+    """Aggregate capital flow intelligence from capital_flow_service."""
+    async with httpx.AsyncClient() as client:
+        tasks = {
+            "etf_flows": _proxy_fetch(client, f"{CAPITAL_FLOW_URL}/api/capital-flows/etf-flows"),
+            "rotation": _proxy_fetch(client, f"{CAPITAL_FLOW_URL}/api/capital-flows/rotation-signal"),
+            "safe_haven": _proxy_fetch(client, f"{CAPITAL_FLOW_URL}/api/capital-flows/safe-haven"),
+            "emerging": _proxy_fetch(client, f"{CAPITAL_FLOW_URL}/api/capital-flows/emerging-markets"),
+            "summary": _proxy_fetch(client, f"{CAPITAL_FLOW_URL}/api/capital-flows/summary"),
+        }
+        results = await asyncio.gather(*tasks.values())
+        mapped = dict(zip(tasks.keys(), results))
+        return {"status": "success", "data": mapped}
+
+
+@app.get("/api/dashboard/regime")
+async def dashboard_regime():
+    """Aggregate regime detection from regime_service."""
+    async with httpx.AsyncClient() as client:
+        tasks = {
+            "current": _proxy_fetch(client, f"{REGIME_URL}/api/regime/current"),
+            "correlation": _proxy_fetch(client, f"{REGIME_URL}/api/regime/correlation-matrix"),
+            "factors": _proxy_fetch(client, f"{REGIME_URL}/api/regime/factor-model"),
+            "summary": _proxy_fetch(client, f"{REGIME_URL}/api/regime/summary"),
+        }
+        results = await asyncio.gather(*tasks.values())
+        mapped = dict(zip(tasks.keys(), results))
+        return {"status": "success", "data": mapped}
+
+
+@app.get("/api/dashboard/full-intel")
+async def dashboard_full_intel():
+    """Aggregate ALL macro/bond/volatility/regime/capital-flow data in a single call."""
+    async with httpx.AsyncClient() as client:
+        tasks = {
+            "macro": _proxy_fetch(client, f"{MACRO_SERVICE_URL}/api/macro/summary"),
+            "bonds": _proxy_fetch(client, f"{BOND_SERVICE_URL}/api/bonds/summary"),
+            "volatility": _proxy_fetch(client, f"{VOLATILITY_SERVICE_URL}/api/volatility/summary"),
+            "options": _proxy_fetch(client, f"{OPTIONS_SERVICE_URL}/api/options/summary"),
+            "capital_flows": _proxy_fetch(client, f"{CAPITAL_FLOW_URL}/api/capital-flows/summary"),
+            "regime": _proxy_fetch(client, f"{REGIME_URL}/api/regime/summary"),
+            "corporate": _proxy_fetch(client, f"{CORPORATE_INTEL_URL}/api/corporate/insider-signals"),
+        }
+        results = await asyncio.gather(*tasks.values())
+        mapped = dict(zip(tasks.keys(), results))
+        return {"status": "success", "data": mapped}
+
+
 @app.get("/")
 def root():
     return {"status": "online", "service": "unified_dashboard_aggregator"}

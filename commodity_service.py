@@ -284,6 +284,209 @@ def get_market_summary(currency: Optional[str] = None):
 async def root():
     return {"status": "online", "service": "commodity_intelligence_service"}
 
+# ============================================================================
+# 2.3 COMMODITY FUTURES CURVE — Term Structure, Crack Spread, Crush Spread
+# ============================================================================
+
+# Futures contract months mapping for key commodities
+FUTURES_MONTHS = {
+    "CL=F": {"codes": ["CL=F", "CLG26.NYM", "CLJ26.NYM", "CLK26.NYM", "CLM26.NYM", "CLN26.NYM", "CLQ26.NYM", "CLU26.NYM", "CLV26.NYM", "CLX26.NYM", "CLZ26.NYM", "CLF27.NYM"], "name": "Crude Oil WTI"},
+    "BZ=F": {"codes": ["BZ=F", "BZG26.NYM", "BZJ26.NYM", "BZK26.NYM", "BZM26.NYM", "BZN26.NYM", "BZQ26.NYM", "BZU26.NYM", "BZV26.NYM", "BZX26.NYM", "BZZ26.NYM", "BZF27.NYM"], "name": "Brent Crude"},
+    "NG=F": {"codes": ["NG=F", "NGG26.NYM", "NGJ26.NYM", "NGK26.NYM", "NGM26.NYM", "NGN26.NYM", "NGQ26.NYM", "NGU26.NYM", "NGV26.NYM", "NGX26.NYM", "NGZ26.NYM", "NGF27.NYM"], "name": "Natural Gas"},
+    "GC=F": {"codes": ["GC=F", "GCG26.CMX", "GCJ26.CMX", "GCM26.CMX", "GCQ26.CMX", "GCV26.CMX", "GCZ26.CMX", "GCG27.CMX"], "name": "Gold"},
+    "SI=F": {"codes": ["SI=F", "SIH26.CMX", "SIK26.CMX", "SIN26.CMX", "SIU26.CMX", "SIV26.CMX", "SIZ26.CMX", "SIH27.CMX"], "name": "Silver"},
+    "HG=F": {"codes": ["HG=F", "HGH26.CMX", "HGK26.CMX", "HGN26.CMX", "HGU26.CMX", "HGV26.CMX", "HGZ26.CMX", "HGH27.CMX"], "name": "Copper"},
+}
+
+FUTURES_CACHE = {}
+FUTURES_CACHE_TTL = 3600  # 1 hour — term structure changes slowly
+
+def _get_futures_cache(key):
+    entry = FUTURES_CACHE.get(key)
+    if entry and time.time() - entry['ts'] < FUTURES_CACHE_TTL:
+        return entry['data']
+    return None
+
+def _set_futures_cache(key, data):
+    FUTURES_CACHE[key] = {'ts': time.time(), 'data': data}
+
+@app.get("/api/commodities/futures-curve")
+async def get_futures_curve(symbol: str = "CL=F"):
+    """Get futures term structure for a commodity. Returns front-month to 12th month prices."""
+    try:
+        # Check cache
+        cached = _get_futures_cache(f"curve_{symbol}")
+        if cached:
+            return {"status": "success", "data": cached, "cached": True}
+
+        config = FUTURES_MONTHS.get(symbol.upper())
+        if not config:
+            # Try to build dynamically
+            base = symbol.upper()
+            config = {"codes": [base], "name": base.replace("=F", "")}
+
+        loop = asyncio.get_event_loop()
+
+        def _fetch_curve():
+            curve = []
+            for code in config["codes"]:
+                try:
+                    tk = yf.Ticker(code)
+                    info = tk.info
+                    price = info.get("regularMarketPrice") or info.get("previousClose")
+                    if price:
+                        curve.append({
+                            "contract": code,
+                            "price": float(price),
+                            "change_pct": float(info.get("regularMarketChangePercent", 0) or 0),
+                            "volume": info.get("volume") or info.get("regularMarketVolume"),
+                            "open_interest": info.get("openInterest")
+                        })
+                except:
+                    continue
+                time.sleep(0.1)  # Rate limit protection
+            return curve
+
+        curve = await loop.run_in_executor(None, _fetch_curve)
+        result = {
+            "symbol": symbol,
+            "name": config["name"],
+            "contango": True,  # Will be determined if front < back
+            "curve": curve,
+            "spread": None
+        }
+
+        # Determine contango/backwardation
+        if len(curve) >= 2:
+            front = curve[0]["price"]
+            back = curve[-1]["price"]
+            result["contango"] = back > front
+            result["spread"] = round(((back / front) - 1) * 100, 2)  # Annualized roughly
+
+        _set_futures_cache(f"curve_{symbol}", result)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/commodities/crack-spread")
+async def get_crack_spread():
+    """3:2:1 Crack Spread — profit margin of refining 3 barrels of crude into 2 gas + 1 heating oil."""
+    try:
+        cached = _get_futures_cache("crack_spread")
+        if cached:
+            return {"status": "success", "data": cached, "cached": True}
+
+        loop = asyncio.get_event_loop()
+
+        def _fetch_crack():
+            # Fetch crude (CL=F), gasoline (RB=F), heating oil (HO=F)
+            cl = yf.Ticker("CL=F")
+            rb = yf.Ticker("RB=F")
+            ho = yf.Ticker("HO=F")
+
+            cl_info = cl.info
+            rb_info = rb.info
+            ho_info = ho.info
+
+            crude_price = cl_info.get("regularMarketPrice") or cl_info.get("previousClose")
+            gas_price = rb_info.get("regularMarketPrice") or rb_info.get("previousClose")
+            heat_price = ho_info.get("regularMarketPrice") or ho_info.get("previousClose")
+
+            if not all([crude_price, gas_price, heat_price]):
+                return None
+
+            crude_price = float(crude_price)
+            gas_price = float(gas_price)
+            heat_price = float(heat_price)
+
+            # 3:2:1 Crack Spread = (2 * RBOB + 1 * HO) - (3 * Crude)
+            # All converted to $/bbl: RBOB (42 gal = 1 bbl), HO (42 gal = 1 bbl), Crude is already $/bbl
+            crack_value = (2 * gas_price + 1 * heat_price) - (3 * crude_price)
+            crack_percent = (crack_value / (3 * crude_price)) * 100 if crude_price > 0 else 0
+
+            return {
+                "crude_price": crude_price,
+                "gasoline_price": gas_price,
+                "heating_oil_price": heat_price,
+                "crack_spread_3_2_1": round(crack_value, 2),
+                "crack_spread_pct": round(crack_percent, 2),
+                "interpretation": "PROFITABLE" if crack_value > 0 else "UNPROFITABLE",
+                "timestamp": time.time()
+            }
+
+        result = await loop.run_in_executor(None, _fetch_crack)
+        if not result:
+            raise HTTPException(status_code=502, detail="Failed to fetch crack spread data")
+        _set_futures_cache("crack_spread", result)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/commodities/crush-spread")
+async def get_crush_spread():
+    """Soybean Crush Spread — profit margin of crushing soybeans into meal + oil.
+    Board Crush = Soybean Meal (1 contract = 100 short tons) + Soybean Oil (1 contract = 60,000 lbs) - Soybeans (1 contract = 5,000 bu)
+    Simplified: ZL (soybean oil) + ZM (soybean meal) - ZS (soybeans)
+    """
+    try:
+        cached = _get_futures_cache("crush_spread")
+        if cached:
+            return {"status": "success", "data": cached, "cached": True}
+
+        loop = asyncio.get_event_loop()
+
+        def _fetch_crush():
+            zs = yf.Ticker("ZS=F")
+            zl = yf.Ticker("ZL=F")
+            zm = yf.Ticker("ZM=F")
+
+            zs_info = zs.info
+            zl_info = zl.info
+            zm_info = zm.info
+
+            soy_price = zs_info.get("regularMarketPrice") or zs_info.get("previousClose")
+            oil_price = zl_info.get("regularMarketPrice") or zl_info.get("previousClose")
+            meal_price = zm_info.get("regularMarketPrice") or zm_info.get("previousClose")
+
+            if not all([soy_price, oil_price, meal_price]):
+                return None
+
+            soy_price = float(soy_price)
+            oil_price = float(oil_price)
+            meal_price = float(meal_price)
+
+            # Simplified crush: value of meal + oil vs cost of beans (per bushel)
+            # 1 bushel soybeans ≈ 44 lbs meal + 11 lbs oil
+            # Simplified: crush_margin = meal_price * 0.022 + oil_price * 0.0055 - soy_price
+            # more practically: margin = (meal_price/100 * 44) + (oil_price/100 * 11) - soy_price
+            crush_margin = (meal_price / 100 * 44) + (oil_price / 100 * 11) - soy_price
+            crush_pct = (crush_margin / soy_price) * 100 if soy_price > 0 else 0
+
+            return {
+                "soybean_price": soy_price,
+                "soybean_oil_price": oil_price,
+                "soybean_meal_price": meal_price,
+                "crush_spread": round(crush_margin, 2),
+                "crush_spread_pct": round(crush_pct, 2),
+                "interpretation": "PROFITABLE" if crush_margin > 0 else "UNPROFITABLE",
+                "timestamp": time.time()
+            }
+
+        result = await loop.run_in_executor(None, _fetch_crush)
+        if not result:
+            raise HTTPException(status_code=502, detail="Failed to fetch crush spread data")
+        _set_futures_cache("crush_spread", result)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/")
+async def root():
+    return {"status": "online", "service": "commodity_intelligence_service"}
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(fetch_commodity_highlights_loop())
