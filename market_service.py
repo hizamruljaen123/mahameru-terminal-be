@@ -575,11 +575,18 @@ async def get_fundamental(symbol: str):
         def _fetch():
             t = yf.Ticker(symbol)
             info = t.info
+            # Detect if this is a banking stock
+            sector_val = info.get("sector", "")
+            industry_val = info.get("industry", "")
+            is_banking = sector_val in ["Financial Services", "Financial"] and \
+                         industry_val in ["Banks - Regional", "Banks - Diversified", "Banks - Major", "Money Center Banks", "Banks"] or \
+                         symbol in ["BBRI", "BMRI", "BBTN", "BNGA", "BNII", "BDMN", "MEGA", "PNBN", "BJBR", "BJTM", "BTPN", "AGRO", "MAYA", "NISP", "SDRA"]
+
             snapshot = {
                 "symbol": symbol,
                 "name": info.get("shortName") or info.get("longName", symbol),
-                "sector": info.get("sector", "N/A"),
-                "industry": info.get("industry", "N/A"),
+                "sector": sector_val,
+                "industry": industry_val,
                 "currency": info.get("currency", "USD"),
                 "country": info.get("country", "N/A"),
                 "marketCap": _safe(info.get("marketCap")),
@@ -631,7 +638,21 @@ async def get_fundamental(symbol: str):
                 "shortRatio": _safe(info.get("shortRatio")),
                 "shortPercentOfFloat": _pct(info.get("shortPercentOfFloat")),
                 "recommendationKey": info.get("recommendationKey", "N/A"),
-                "wikipedia_summary": fetch_wikipedia_summary(info.get("longName") or info.get("shortName", symbol))
+                "wikipedia_summary": fetch_wikipedia_summary(info.get("longName") or info.get("shortName", symbol)),
+                # Banking-specific metrics
+                "isBanking": is_banking,
+                "netInterestMargin": _safe(info.get("netInterestMargin")) if is_banking else None,
+                "nonPerformingLoans": _safe(info.get("nonPerformingLoans")) if is_banking else None,
+                "loanLossProvision": _safe(info.get("loanLossProvision")) if is_banking else None,
+                "loanToDeposit": _safe(info.get("loanToDeposit")) if is_banking else None,
+                "totalAssets": _safe(info.get("totalAssets")) if is_banking else None,
+                "totalDeposits": _safe(info.get("totalDeposits")) if is_banking else None,
+                "commonEquityTier1": _safe(info.get("commonEquityTier1")) if is_banking else None,
+                "tier1Ratio": _safe(info.get("tier1Ratio")) if is_banking else None,
+                "riskWeightedAssets": _safe(info.get("riskWeightedAssets")) if is_banking else None,
+                "costToIncomeRatio": _safe(info.get("costToIncomeRatio")) if is_banking else None,
+                "netChargeOffs": _safe(info.get("netChargeOffs")) if is_banking else None,
+                "allowanceForLoanLosses": _safe(info.get("allowanceForLoanLosses")) if is_banking else None,
             }
             try: income = _fmt_fin_df(t.financials)
             except: income = {}

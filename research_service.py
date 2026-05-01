@@ -62,6 +62,86 @@ AVAILABLE_APIS = [
 
 CAVEMAN_PROMPT = "RESPOND TERSE LIKE SMART CAVEMAN. ALL TECHNICAL SUBSTANCE STAY. ONLY FLUFF DIE. NO ARTICLES, NO FILLER, NO PLEASANTRIES, NO HEDGING. USE SENTENCE FRAGMENTS. CODE BLOCKS UNTOUCHED."
 
+# ============================================================================
+# MASTER SYSTEM PROMPT — Banking Sector Analysis Rules (from audit_mendalam.txt)
+# Applied automatically for banking sector symbols to prevent hallucination,
+# proxy data, wrong valuation models, and cross-stage contradictions.
+# ============================================================================
+MASTER_SYSTEM_PROMPT = """[SYSTEM INSTRUCTION - WAJIB DITAATI SAMPAI STAGE 8 SELESAI]
+Anda adalah Senior Equity Research Analyst bersertifikat CFA Level III yang spesialis menganalisis sektor perbankan Indonesia. Anda sedang menulis laporan komparatif institusional.
+
+LAKUKAN HAL BERIKUT SECARA MUTLAK:
+1. TAKSONOMI SEKTOR: BBRI dan BMRI adalah bank umum nasional berstatus SIFI (Systemically Important Financial Institutions). DILARANG KERAS menyebut mereka sebagai "Banks - Regional".
+2. ANALISIS ARUS KAS: Untuk bank, Operating Cash Flow (OCF) negatif adalah NORMAL saat Loan Growth tinggi. DILARANG KERAS menggunakan rasio OCF/Net Income untuk menilai "kualitas pendapatan", "akrual", atau "tekanan likuiditas".
+3. METODOLOGI VALUASI: DILARANG KERAS menggunakan EV/Revenue (karena Deposit bukanlah utang korporasi). DILARANG KERAS menggunakan model DuPont tradisional (Revenue/Total Assets) jika data Total Assets tidak tersedia. Jika diminta menganalisis DuPont tapi data Total Assets kosong, TULIS: "[DATA TIDAK TERSEDIA]". Valuasi wajib hanya menggunakan P/B adjusted ROE atau Dividend Discount Model.
+4. ATURAN KEKOSONGAN DATA (ZERO PROXY): Jika diminta menganalisis indikator (Volume, SMA20, Stochastic, Skor Kepemimpinan) tetapi datanya TIDAK ADA di tabel yang saya berikan, Anda WAJIB menulis '[DATA TIDAK TERSEDIA - TIDAK DAPAT DINILAI]'. DILARANG menggunakan MFI sebagai proxy Volume. DILARANG menggunakan Parabolic SAR sebagai proxy SMA. DILARANG menebak skor 1-10 untuk kualitas direksi jika hanya diberi data nama dan umur.
+5. ATURAN ANOMALI (RED FLAG): Jika Anda menemukan anomali data (misal: 1 orang menjabat direksi di 2 bank BUMN kompetitor sekaligus, atau Dividend Yield > 10%), Anda WAJIB menghentikan analisis standar dan menempatkan anomali tersebut sebagai "RED FLAG RISIKO TATA KELOLA" yang wajib dibahas mendalam di bagian risiko. DILARANG MENGABAIKANNYA dengan alasan "kesalahan data".
+6. KETEPATAN MATEMATIKA: Hitung semua persentase dan rasio dengan presisi 100%. (Contoh: 453T / 409T = 1.1x, BUKAN 2.2x). Total bobot dalam Scorecard WAJIB tepat 100%, dilarang melebihiinya.
+7. GAYA BAHASA: Tulis sesingkat, padat, dan sarat informasi mungkin. HINDARI kalimat meta seperti "Sekarang kita akan menganalisis..." atau "Karena data tidak tersedia, kita akan menggunakan asumsi...". Langsung masuk ke data dan kesimpulan.
+"""
+
+# Banking sector symbols that trigger the Master System Prompt
+BANKING_SYMBOLS = {"BBRI", "BMRI", "BBTN", "BNGA", "BNII", "BNLI", "AGRO", "MAYA", "NISP", "BJBR", "BJTM", "BDMN", "MEGA", "PNBN", "SDRA", "BTPN", "NOBU", "INPC", "BACA", "BBYB", "BBSI", "BEKS", "BGTG", "BINA", "BKSW", "BMSR", "BNBA", "BNLI", "BSIM", "BTPN", "BVIC", "DNAR", "MASB", "MCOR", "NICL", "NOBU", "PNBS", "YULE"}
+
+# Banking-specific metrics that should be requested when sector is banking
+BANKING_METRICS = ["NIM", "NPL_Gross", "NPL_Net", "LDR", "CASA_Ratio", "BOPO", "Total_Aset"]
+
+# Chain prompting templates for banking analysis (from audit_mendalam.txt)
+PROMPT_A_TEMPLATE = """Berdasarkan [SYSTEM INSTRUCTION] di atas, dan menggunakan DATA pada tabel di bawah ini, buatlah Stage 1 (Model Bisnis & Moat), Stage 2 (Teknikal), dan Stage 3 (Fundamental).
+
+[TABLE DATA HERE]
+
+ATURAN KHUSUS STAGE INI:
+- Stage 2: Jika tidak ada data Volume, DILARANG menganalisis Wyckoff (Akumulasi/Distribusi). Batasi hanya pada Support/Resistance, RSI, ADX, dan Risk/Reward.
+- Stage 3: Fokus analisis pada NIM, NPL, LDR, BOPO, dan P/B vs ROE. Abaikan analisis DuPont jika tidak ada Total Aset."""
+
+PROMPT_B_TEMPLATE = """Baca kembali output Anda yang tersimpan di Bagian_A.txt. Sekarang buatlah Stage 4 (Scorecard Komparatif) dan Stage 5 (Analisis Sentimen Berita).
+
+ATURAN KHUSUS STAGE INI:
+- Stage 4: Buat tabel scorecard dengan total bobot PASTI 100%. Jangan memberikan skor numerik pada variabel yang datanya kosong (beri tanda strip "-"). Pastikan skor ESG konsisten dengan sentimen hukum/berita negatif yang ada.
+- Stage 5: Ekstrak hanya fakta spesifik dari berita (misal: denda regulasi, skandal spesifik), jangan membuat generalisasi luas."""
+
+PROMPT_C_TEMPLATE = """Baca kembali Bagian_A.txt dan Bagian_B.txt. Sekarang buatlah Stage 6 (Jejak Kepemimpinan & Intelijen Risiko Hukum) berdasarkan DATA DIREKSI yang saya berikan di bawah ini:
+
+[DIRECTOR DATA HERE]
+
+ATURAN KHUSUS STAGE INI:
+- Terapkan ATURAN ANOMALI dari System Instruction. Jika ada nama yang sama di dua perusahaan, wajib jadikan Red Flag utama.
+- Jika tidak ada data kompensasi atau buyback, tulis "[DATA TIDAK TERSEDIA]". Jangan mengarang skor Kualitas Kepemimpinan."""
+
+PROMPT_D_TEMPLATE = """Anda telah menyelesaikan Bagian_A (Stage 1-3), Bagian_B (Stage 4-5), dan Bagian_C (Stage 6).
+
+TUGAS ANDA SEKARANG adalah membuat STAGE 8 (One-Pager Institusional & Putusan Akhir).
+Sebelum menulis, Anda HARUS melakukan REKONSILIASI untuk menghilangkan kontradiksi:
+1. Jika Stage 2 (Teknikal) mendukung BMRI, tapi Stage 3 (Fundamental) mendukung BBRI, Anda TIDAK BOLEH memaksa memilih salah satu secara buta.
+2. Anda harus menciptakan SINTESIS: Misalnya, "BBRI untuk akumulasi jangka panjang (Core Holding), namun karena teknikalnya bearish, lakukan averaging down bertahap. Sementara BMRI untuk trading jangka pendek (Tactical Position) karena R:R teknikal yang superior."
+3. Jika di Stage 6 ada Red Flag Hukum pada BBRI, hal itu WAJIB menurunkan rekomendasi akhir BBRI atau menambahkan syarat (kondisi) dalam putusan.
+
+Format Stage 8:
+- Snapshot 3 kalimat per saham.
+- Matriks Rekomendasi Final (Tabel: Harga, Target, Potensi Return, Profil Risiko, Peran di Portofolio).
+- Putusan Komparatif Akhir (1 paragraf definitif yang menyebutkan kedua skenario di atas)."""
+
+# Symbols that are Indonesian banking stocks
+INDONESIAN_BANK_SYMBOLS = {"BBRI", "BMRI", "BBTN", "BNGA", "BNII", "BDMN", "MEGA", "PNBN", "BJBR", "BJTM", "BTPN", "AGRO", "MAYA", "NISP", "SDRA"}
+
+def is_banking_symbol(symbol):
+    """Check if a symbol is an Indonesian banking stock."""
+    return symbol.upper() in INDONESIAN_BANK_SYMBOLS
+
+def get_system_prompt(symbol, caveman=False):
+    """Get the appropriate system prompt based on symbol sector.
+    For banking symbols, uses the Master System Prompt with banking-specific rules.
+    """
+    if is_banking_symbol(symbol):
+        base = MASTER_SYSTEM_PROMPT
+    else:
+        base = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
+    
+    if caveman:
+        base += f"\n{CAVEMAN_PROMPT}"
+    return base
+
 DIT_API_URL = "https://api.dit.ai"
 
 DIT_MODELS = [
@@ -345,6 +425,9 @@ def analyze_report():
     if not api_key:
         return jsonify({"status": "error", "message": "DeepSeek API Key wajib diisi."}), 400
 
+    # Use Master System Prompt for banking symbols, standard prompt otherwise
+    system_prompt = get_system_prompt(symbol, caveman)
+
     prompts = {
         1: f"Fokus pada: **1. Ringkasan Emiten & Analisis Sektor**. Jelaskan model bisnisnya, tren industrinya, dan profil umum perusahaan.",
         2: f"Fokus pada: **2. Bedah Fundamental Keuangan**. Analisis laporan keuangan historis, rasio margin, valuasi, kas, dan utang. Apakah valuasi saat ini premium atau murah?",
@@ -365,9 +448,7 @@ def analyze_report():
                 yield f"data: {json.dumps({'error': 'Gemini API Key not found'})}\n\n"
                 return
 
-            system_instruction = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
-            if caveman:
-                system_instruction += f" {CAVEMAN_PROMPT}"
+            system_instruction = system_prompt
             
             contents = []
             for s_num in range(1, stage):
@@ -432,9 +513,7 @@ def analyze_report():
             url = f"{DIT_API_URL}/v1/chat/completions"
             
             # Prepare OpenAI-style messages
-            system_msg = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
-            if caveman:
-                system_msg += f" {CAVEMAN_PROMPT}"
+            system_msg = system_prompt
                 
             messages = [{"role": "system", "content": system_msg}]
             
@@ -501,9 +580,7 @@ def analyze_report():
         # DeepSeek Logic
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         
-        system_msg = "Anda adalah asisten AI Analis Keuangan Profesional dari Asetpedia Hub."
-        if caveman:
-            system_msg += f" {CAVEMAN_PROMPT}"
+        system_msg = system_prompt
             
         messages = [
             {"role": "system", "content": system_msg}
@@ -582,6 +659,13 @@ def analyze_compare():
     is_dit = any(m['id'] == model for m in DIT_MODELS)
     is_gemini = any(m['id'] == model for m in GEMINI_MODELS)
 
+    # Inject Master System Prompt if any symbol is a banking stock
+    has_banking_symbol = any(is_banking_symbol(s) for s in symbols)
+    if has_banking_symbol and system_prompt:
+        system_prompt = MASTER_SYSTEM_PROMPT + "\n\n" + system_prompt
+    elif has_banking_symbol and not system_prompt:
+        system_prompt = MASTER_SYSTEM_PROMPT
+
     def generate():
         if is_gemini:
             # Gemini API Logic for Comparison
@@ -592,7 +676,7 @@ def analyze_compare():
 
             sys_content = system_prompt or "You are a Senior Institutional Research Analyst at Asetpedia Intelligence."
             if caveman:
-                sys_content += f" {CAVEMAN_PROMPT}"
+                sys_content += f"\n{CAVEMAN_PROMPT}"
             
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={gemini_key}"
             payload = {

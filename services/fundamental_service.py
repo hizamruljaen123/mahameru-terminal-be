@@ -81,6 +81,11 @@ def get_fundamental_data(symbol):
     wiki_base_url = "https://id.wikipedia.org/w/api.php" if country == "Indonesia" else "https://en.wikipedia.org/w/api.php"
     wiki_summary = fetch_wikipedia_summary(company_name, wiki_base_url)
 
+    # Detect if this is a banking stock to add banking-specific metrics
+    is_banking = info.get("sector") in ["Financial Services", "Financial"] and \
+                 info.get("industry") in ["Banks - Regional", "Banks - Diversified", "Banks - Major", "Money Center Banks", "Banks"] or \
+                 symbol in ["BBRI", "BMRI", "BBTN", "BNGA", "BNII", "BDMN", "MEGA", "PNBN", "BJBR", "BJTM", "BTPN", "AGRO", "MAYA", "NISP", "SDRA"]
+
     snapshot = {
         "symbol": symbol,
         "name": company_name,
@@ -141,7 +146,21 @@ def get_fundamental_data(symbol):
         "shortPercentOfFloat": clean_data(info.get("shortPercentOfFloat")),
         "recommendationKey": info.get("recommendationKey", "N/A"),
         "wikipedia_summary": wiki_summary,
-        "companyOfficers": info.get("companyOfficers", [])[:10]
+        "companyOfficers": info.get("companyOfficers", [])[:10],
+        # Banking-specific metrics (may be None if not available from yfinance)
+        "isBanking": is_banking,
+        "netInterestMargin": clean_data(info.get("netInterestMargin")) if is_banking else None,
+        "nonPerformingLoans": clean_data(info.get("nonPerformingLoans")) if is_banking else None,
+        "loanLossProvision": clean_data(info.get("loanLossProvision")) if is_banking else None,
+        "loanToDeposit": clean_data(info.get("loanToDeposit")) if is_banking else None,
+        "totalAssets": clean_data(info.get("totalAssets")) if is_banking else None,
+        "totalDeposits": clean_data(info.get("totalDeposits")) if is_banking else None,
+        "commonEquityTier1": clean_data(info.get("commonEquityTier1")) if is_banking else None,
+        "tier1Ratio": clean_data(info.get("tier1Ratio")) if is_banking else None,
+        "riskWeightedAssets": clean_data(info.get("riskWeightedAssets")) if is_banking else None,
+        "costToIncomeRatio": clean_data(info.get("costToIncomeRatio")) if is_banking else None,
+        "netChargeOffs": clean_data(info.get("netChargeOffs")) if is_banking else None,
+        "allowanceForLoanLosses": clean_data(info.get("allowanceForLoanLosses")) if is_banking else None,
     }
     # Sector mapping and global indices
     SECTOR_ETF = {
