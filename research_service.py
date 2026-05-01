@@ -3,6 +3,7 @@ import json
 import time
 import requests
 import traceback
+import codecs
 from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS
 import yfinance as yf
@@ -404,9 +405,10 @@ def analyze_report():
                 res = requests.post(url, json=payload, stream=True, timeout=120)
                 if res.status_code == 200:
                     import re
+                    decoder = codecs.getincrementaldecoder('utf-8')()
                     for chunk in res.iter_content(chunk_size=None):
                         if not chunk: continue
-                        chunk_str = chunk.decode('utf-8')
+                        chunk_str = decoder.decode(chunk, final=False)
                         texts = re.findall(r'"text":\s*"(.*?)"', chunk_str)
                         for t in texts:
                             try:
@@ -481,7 +483,11 @@ def analyze_report():
                             if data_chunk == '[DONE]': break
                             try:
                                 chunk_json = json.loads(data_chunk)
-                                content = chunk_json.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                delta = chunk_json.get('choices', [{}])[0].get('delta', {})
+                                content = delta.get('content', '')
+                                reasoning = delta.get('reasoning_content', '')
+                                if reasoning:
+                                    yield f"data: {json.dumps({'thinking': reasoning})}\n\n"
                                 if content:
                                     yield f"data: {json.dumps({'content': content})}\n\n"
                             except:
@@ -534,8 +540,12 @@ def analyze_report():
                 max_tokens=8192
             )
             for chunk in response:
-                content = chunk.choices[0].delta.content
-                if content is not None:
+                delta = chunk.choices[0].delta
+                content = getattr(delta, 'content', None)
+                reasoning = getattr(delta, 'reasoning_content', None)
+                if reasoning:
+                    yield f"data: {json.dumps({'thinking': reasoning})}\n\n"
+                if content:
                     yield f"data: {json.dumps({'content': content})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -598,9 +608,10 @@ def analyze_compare():
                 res = requests.post(url, json=payload, stream=True, timeout=120)
                 if res.status_code == 200:
                     import re
+                    decoder = codecs.getincrementaldecoder('utf-8')()
                     for chunk in res.iter_content(chunk_size=None):
                         if not chunk: continue
-                        chunk_str = chunk.decode('utf-8')
+                        chunk_str = decoder.decode(chunk, final=False)
                         texts = re.findall(r'"text":\s*"(.*?)"', chunk_str)
                         for t in texts:
                             try:
@@ -654,7 +665,11 @@ def analyze_compare():
                             if data_chunk == '[DONE]': break
                             try:
                                 chunk_json = json.loads(data_chunk)
-                                content = chunk_json.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                delta = chunk_json.get('choices', [{}])[0].get('delta', {})
+                                content = delta.get('content', '')
+                                reasoning = delta.get('reasoning_content', '')
+                                if reasoning:
+                                    yield f"data: {json.dumps({'thinking': reasoning})}\n\n"
                                 if content:
                                     yield f"data: {json.dumps({'content': content})}\n\n"
                             except:
@@ -684,8 +699,12 @@ def analyze_compare():
                 temperature=0.3,  # Lower temperature for more precise institutional analysis
             )
             for chunk in response:
-                content = chunk.choices[0].delta.content
-                if content is not None:
+                delta = chunk.choices[0].delta
+                content = getattr(delta, 'content', None)
+                reasoning = getattr(delta, 'reasoning_content', None)
+                if reasoning:
+                    yield f"data: {json.dumps({'thinking': reasoning})}\n\n"
+                if content:
                     yield f"data: {json.dumps({'content': content})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
