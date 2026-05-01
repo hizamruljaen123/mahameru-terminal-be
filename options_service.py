@@ -186,23 +186,29 @@ def get_options_chain(symbol: str, expiry: Optional[str] = None):
         for _, row in chain.iterrows():
             vol = row.get('volume', 0) or 0
             oi = row.get('openInterest', 0) or 0
-            if vol > 0 and oi > 0 and vol / oi > 2:  # Volume > 2x OI = unusual
+            iv = clean(row.get('impliedVolatility'))
+            price = clean(row.get('lastPrice'))
+            
+            if vol > 0 and oi > 0 and vol / oi > 1.5:  # Lowered threshold to see more data
                 unusual.append({
                     "strike": float(row['strike']),
-                    "option_type": row['option_type'],
+                    "option_type": row['option_type'].upper(),
                     "volume": int(vol),
+                    "size": int(vol),
                     "open_interest": int(oi),
                     "vol_oi_ratio": round(float(vol/oi), 2),
-                    "expiry": target_expiry
+                    "expiry": target_expiry,
+                    "iv": round(iv * 100, 1) if iv else 0,
+                    "premium": round(vol * 100 * (price or 0), 0),
+                    "sentiment": "BULLISH" if (row['option_type'] == 'call' and price and price > row.get('bid', 0)) else "BEARISH"
                 })
 
         result = {
             "symbol": symbol,
-            "expiry": target_expiry,
-            "available_expiries": expirations[:10],
             "current_price": current_price,
             "max_pain": max_pain,
             "pcr": pcr,
+            "iv": round(iv_atm * 100, 1) if 'iv_atm' in locals() and iv_atm else None, # Compatibility field
             "total_options": len(formatted),
             "unusual_activity": sorted(unusual, key=lambda x: x['vol_oi_ratio'], reverse=True)[:10],
             "chain": formatted[:200],  # Limit to 200 for performance
@@ -395,6 +401,7 @@ def get_iv_rank(symbol: str = "SPY"):
         result = {
             "symbol": symbol,
             "current_price": curr_price,
+            "iv": round(iv_atm * 100, 2) if iv_atm else None, # Compatibility field
             "atm_iv_call": round(iv_call * 100, 2) if iv_call else None,
             "atm_iv_put": round(iv_put * 100, 2) if iv_put else None,
             "atm_iv": round(iv_atm * 100, 2) if iv_atm else None,
@@ -410,16 +417,72 @@ def get_iv_rank(symbol: str = "SPY"):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/options/iv-rank/all")
+def get_all_iv_ranks():
+    """Aggregate IV ranks for all watch symbols."""
+    cached = _get_cached("iv_ranks_all")
+    if cached: return {"status": "success", "data": cached}
+    
+    results = []
+    for symbol in list(OPTIONS_TICKERS.keys()):
+        if symbol in ["BTC-USD", "ETH-USD"]: continue
+        try:
+            # Re-use the existing logic by calling the function directly
+            data = get_iv_rank(symbol)
+            if data["status"] == "success":
+                results.append(data["data"])
+        except: continue
+    
+    _set_cached("iv_ranks_all", results)
+    return {"status": "success", "data": results}
+
+
+@app.get("/api/options/unusual/all")
+def get_all_unusual_activity():
+    """Aggregate unusual options activity across market."""
+    cached = _get_cached("unusual_all")
+    if cached: return {"status": "success", "data": cached}
+    
+    results = []
+    for symbol in list(OPTIONS_TICKERS.keys()):
+        if symbol in ["BTC-USD", "ETH-USD"]: continue
+        try:
+            data = get_options_chain(symbol)
+            if data["status"] == "success":
+                # chain endpoint returns unusual_activity for that symbol
+                for item in data["data"].get("unusual_activity", []):
+                    item["symbol"] = symbol
+                    # Add timestamp for sorting
+                    item["timestamp"] = int(time.time() * 1000)
+                    results.append(item)
+        except: continue
+    
+    # Sort by volume/oi ratio
+    results.sort(key=lambda x: x.get('vol_oi_ratio', 0), reverse=True)
+    
+    _set_cached("unusual_all", results[:50])
+    return {"status": "success", "data": results[:50]}
+
+
 @app.get("/api/options/summary")
 def get_options_summary():
     """Aggregated options market overview."""
     try:
-        pcr_data = _get_cached("pcr_aggregate") or {}
-        max_pain_data = _get_cached("max_pain_all") or {}
+        pcr_data = _get_cached("pcr_aggregate")
+        if not pcr_data: pcr_data = get_put_call_ratio().get("data", {})
+        
+        max_pain_data = _get_cached("max_pain_all")
+        if not max_pain_data: max_pain_data = get_max_pain().get("data", {})
+        
+        iv_rank_data = _get_cached("iv_ranks_all")
+        if not iv_rank_data: iv_rank_data = get_all_iv_ranks().get("data", [])
+        
+        unusual_data = _get_cached("unusual_all")
+        if not unusual_data: unusual_data = get_all_unusual_activity().get("data", [])
 
         # Key signals
         signals = []
-        if pcr_data.get('market_pcr_oi'):
+        if pcr_data and pcr_data.get('market_pcr_oi'):
             pcr = pcr_data['market_pcr_oi']
             if pcr > 1.0:
                 signals.append({"signal": "HIGH_PUT_ACTIVITY", "severity": "MEDIUM",
@@ -430,6 +493,8 @@ def get_options_summary():
             "data": {
                 "put_call_ratio": pcr_data,
                 "max_pain": max_pain_data,
+                "iv_rank": iv_rank_data,
+                "unusual_activity": unusual_data,
                 "signals": signals,
                 "last_updated": int(time.time())
             }
