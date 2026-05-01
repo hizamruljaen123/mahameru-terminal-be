@@ -555,35 +555,6 @@ def get_ml_analysis(symbol):
     })
     set_cached_intel(cache_key, result)
     return jsonify(result)
-
-
-    # APEF top echoes for the table
-    apef_results = calculate_apef(df)
-    top_echoes = []
-    # Re-fetch the top matches to get dates
-    # Wait, the calculate_apef already did the weighted average. 
-    # I'll just return the raw matches as well.
-    # Let's simplify and make calculate_apef return both.
-    
-    # Monte Carlo Probabilities
-    mc_final_prices = [p[-1] for p in mc_results]
-    prob_up = sum(1 for p in mc_final_prices if p > last_price) / len(mc_final_prices)
-    
-    return jsonify(clean_data({
-        "symbol": symbol,
-        "hurst": float(h_exp),
-        "monte_carlo": mc_results,
-        "mc_stats": {"prob_up": float(prob_up), "prob_down": float(1 - prob_up)},
-        "arima_forecast": forecast_series,
-        "regime": "Trending" if h_exp > 0.55 else "Mean-Reverting" if h_exp < 0.45 else "Random",
-        "alpha": {
-            "order_blocks": order_blocks[-10:],
-            "fvg": fvg[-10:],
-            "apef_echo": apef_results,
-            "sera_forces": {"f_up": float(f_up), "f_down": float(f_down)}
-        },
-        "sera": sera_series
-    }))
 def calculate_apef(df, lookback=10, threshold=0.85, decay_lambda=0.002):
     prices = df['Close'].values
     # Use log returns for pattern recognition

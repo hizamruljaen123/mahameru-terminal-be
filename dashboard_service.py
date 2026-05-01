@@ -245,8 +245,8 @@ async def get_dashboard_intelligence():
         conn = get_db_connection()
         try:
             cursor = conn.cursor(dictionary=True)
-            placeholders = ",".join(["'%s'" % c for c in supported])
-            cursor.execute(f"SELECT code, name FROM countries WHERE code IN ({placeholders})")
+            placeholders = ",".join(["%s"] * len(supported))
+            cursor.execute(f"SELECT code, name FROM countries WHERE code IN ({placeholders})", tuple(supported))
             rows = cursor.fetchall()
             cursor.close()
             return rows

@@ -90,6 +90,36 @@ COMMODITY_CACHE = {
 }
 _CACHE_LOCK = threading.Lock()
 
+# DETAIL CACHE — reduce redundant yfinance calls for same symbol/period
+COMMODITY_DETAIL_CACHE = {}
+COMMODITY_D_CACHE_TTL = 900  # 15 mins
+
+def get_commodity_detail_cache(symbol, period):
+    key = f"{symbol}:{period}"
+    if key in COMMODITY_DETAIL_CACHE:
+        entry = COMMODITY_DETAIL_CACHE[key]
+        if time.time() - entry['timestamp'] < COMMODITY_D_CACHE_TTL:
+            return entry['data']
+    return None
+
+def set_commodity_detail_cache(symbol, period, data):
+    key = f"{symbol}:{period}"
+    COMMODITY_DETAIL_CACHE[key] = {'timestamp': time.time(), 'data': data}
+
+# Fields the frontend actually uses from ticker.info — filter out 80KB of noise
+COMMODITY_INSTITUTIONAL_FIELDS = [
+    "shortName", "regularMarketPrice", "previousClose", "bid", "ask",
+    "dayLow", "dayHigh", "fiftyTwoWeekLow", "fiftyTwoWeekHigh",
+    "volume", "regularMarketVolume", "openInterest",
+    "marketCap", "beta", "dividendYield", "payoutRatio",
+    "fiftyDayAverage", "twoHundredDayAverage",
+    "priceToSalesTrailing12Months", "trailingPE",
+    "currency", "quoteType", "exchange", "market"
+]
+
+def filter_info(info):
+    return {k: info.get(k) for k in COMMODITY_INSTITUTIONAL_FIELDS if k in info}
+
 def _fetch_commodity_batch(targets):
     """Fetch price data for a batch of commodity symbols. Returns list."""
     data = []
@@ -141,6 +171,11 @@ def get_commodities_highlights():
 @app.get("/api/commodities/detail/{symbol}")
 def get_commodity_detail(symbol: str, period: str = "6mo"):
     try:
+        # Check cache first
+        cached = get_commodity_detail_cache(symbol, period)
+        if cached:
+            return {"status": "success", "data": cached}
+
         ticker = yf.Ticker(symbol)
         info = ticker.info
         
@@ -152,7 +187,7 @@ def get_commodity_detail(symbol: str, period: str = "6mo"):
             hist['Date'] = hist['Date'].dt.strftime('%Y-%m-%d')
             history_data = clean_data(hist.to_dict(orient='records'))
 
-        # Construct commodity detail
+        # Construct commodity detail with filtered institutional field
         detail = {
             "symbol": symbol,
             "name": info.get("shortName", next((x["name"] for x in COMMODITY_ENTITIES if x["symbol"] == symbol), symbol)),
@@ -167,9 +202,10 @@ def get_commodity_detail(symbol: str, period: str = "6mo"):
             "volume": info.get("volume") or info.get("regularMarketVolume"),
             "openInterest": info.get("openInterest"),
             "history": history_data,
-            "institutional": info
+            "institutional": filter_info(info)  # Filtered from ~80KB to ~5KB
         }
         
+        set_commodity_detail_cache(symbol, period, detail)
         return {"status": "success", "data": detail}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

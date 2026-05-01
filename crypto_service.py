@@ -619,7 +619,7 @@ def get_coin_detail(symbol: str, period: str = "1mo"):
                 current_p = price if price > 0 else closes[-1]
                 print(f"[MONTE_CARLO] Running for {symbol} at ${current_p} (Vol: {vol:.2f})")
                 
-                simulator = MonteCarloSimulator({'n_simulations': 5000})
+                simulator = MonteCarloSimulator({'n_simulations': 1000})
                 
                 # Sim for 7d, 30d, 90d
                 horizons = [7, 30, 90]
