@@ -40,6 +40,8 @@ ENABLE_STREAMING = os.getenv("COPILOT_ENABLE_STREAMING", "true").lower() == "tru
 ENABLE_LLM = os.getenv("COPILOT_ENABLE_LLM", "true").lower() == "true"
 
 LOCAL_DEV = os.getenv("LOCAL_DEV", "false").lower() == "true"
+COPILOT_ROOT_PATH = os.getenv("COPILOT_ROOT_PATH", "/copilot" if not LOCAL_DEV else "")
+
 if LOCAL_DEV:
     print("[LOCAL DEV] Routing TA service to http://127.0.0.1:5007")
 
