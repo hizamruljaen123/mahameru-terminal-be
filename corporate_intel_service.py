@@ -46,10 +46,15 @@ _CACHE_LOCK = threading.Lock()
 CACHE_TTL = 1800  # 30 minutes (fundamental data changes slowly)
 
 def clean(val):
-    if val is None or (isinstance(val, (float, int, np.floating, np.integer)) and (np.isnan(val) or np.isinf(val))):
+    if val is None:
         return None
-    try: return float(val)
-    except: return None
+    try:
+        v = float(val)
+        if np.isnan(v) or np.isinf(v):
+            return None
+        return v
+    except:
+        return None
 
 def _get_cached(key):
     with _CACHE_LOCK:
@@ -249,8 +254,16 @@ def get_insider_summary_all():
             except:
                 continue
 
-        # Sort by date
-        all_trades.sort(key=lambda x: x.get('filing_date', ''), reverse=True)
+        # Generate history for chart
+        hist_dict = {}
+        for t in all_trades:
+            dt = t.get('filing_date')
+            if not dt: continue
+            if dt not in hist_dict: hist_dict[dt] = {"buys": 0, "sells": 0}
+            if t['transaction_type'] == 'Buy': hist_dict[dt]['buys'] += 1
+            else: hist_dict[dt]['sells'] += 1
+        
+        history = [{"date": k, "buys": v['buys'], "sells": v['sells']} for k, v in sorted(hist_dict.items())]
 
         result = {
             "trades": all_trades[:50],
@@ -259,7 +272,7 @@ def get_insider_summary_all():
                 "buys": total_buys,
                 "sells": total_sells,
                 "buy_sell_ratio": total_buys / (total_sells if total_sells > 0 else 1),
-                "history": [] # Placeholder for chart if needed
+                "history": history
             }
         }
         _set_cached("insider_all", result)
@@ -285,6 +298,7 @@ def get_analyst_changes():
         for symbol in WATCHLIST[:20]:  # Limit for performance
             try:
                 t = yf.Ticker(symbol)
+                # Try both recommendations and upgrades_downgrades
                 try:
                     recs = t.recommendations
                     upgrades = t.upgrades_downgrades
@@ -293,19 +307,37 @@ def get_analyst_changes():
                     upgrades = None
 
                 info = t.info
+                curr_price = clean(info.get("regularMarketPrice") or info.get("previousClose"))
 
-                if recs is not None and not recs.empty:
-                    # Get latest 5 recommendations
-                    for _, row in recs.head(5).iterrows():
+                if upgrades is not None and not upgrades.empty:
+                    # upgrades_downgrades is usually more detailed in newer yf
+                    for idx, row in upgrades.sort_index(ascending=False).head(10).iterrows():
+                        pt_new = clean(row.get('Target Price'))
+                        upside = ((pt_new / curr_price) - 1) if pt_new and curr_price else None
                         entry = {
-                            "date": row.name.strftime('%Y-%m-%d') if hasattr(row.name, 'strftime') else str(row.name),
+                            "date": idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx),
                             "symbol": symbol,
                             "company": info.get('shortName', symbol),
                             "firm": row.get('Firm'),
                             "to_rating": row.get('To Grade'),
                             "from_rating": row.get('From Grade'),
                             "action": row.get('Action'),
-                            "pt_new": None, # yf recommendations don't usually have these
+                            "pt_new": pt_new,
+                            "pt_old": None,
+                            "upside": upside
+                        }
+                        changes.append(entry)
+                elif recs is not None and not recs.empty:
+                    for idx, row in recs.head(10).iterrows():
+                        entry = {
+                            "date": idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx),
+                            "symbol": symbol,
+                            "company": info.get('shortName', symbol),
+                            "firm": row.get('Firm'),
+                            "to_rating": row.get('To Grade'),
+                            "from_rating": row.get('From Grade'),
+                            "action": row.get('Action'),
+                            "pt_new": None,
                             "pt_old": None,
                             "upside": None
                         }
@@ -347,29 +379,35 @@ def get_earnings_calendar():
                 info = t.info
                 calendar = t.calendar
 
-                if calendar is not None and not calendar.empty:
-                    earnings_date = calendar.get('Earnings Date', None)
-                    if earnings_date is not None:
-                        if isinstance(earnings_date, list) and len(earnings_date) > 0:
-                            earnings_date = earnings_date[0]
-                        if isinstance(earnings_date, pd.Timestamp):
-                            earnings_date = earnings_date.strftime('%Y-%m-%d')
+                if calendar is not None and not isinstance(calendar, list):
+                    # yf returns a dict or dataframe
+                    if isinstance(calendar, dict):
+                        e_dates = calendar.get('Earnings Date', [])
+                        e_date = e_dates[0] if e_dates else None
+                        eps_est = calendar.get('EPS Estimate')
+                        rev_est = calendar.get('Revenue Estimate')
+                    else:
+                        # Sometimes it's a dataframe with 'Value' column
+                        try:
+                            e_date = calendar.loc['Earnings Date'].iloc[0] if 'Earnings Date' in calendar.index else None
+                            eps_est = calendar.loc['EPS Estimate'].iloc[0] if 'EPS Estimate' in calendar.index else None
+                            rev_est = calendar.loc['Revenue Estimate'].iloc[0] if 'Revenue Estimate' in calendar.index else None
+                        except:
+                            e_date = eps_est = rev_est = None
 
-                    eps_estimate = calendar.get('EPS Estimate', None)
-                    eps_actual = calendar.get('EPS Actual', None)
-
-                    if earnings_date:
+                    if e_date:
+                        if hasattr(e_date, 'strftime'): e_date = e_date.strftime('%Y-%m-%d')
                         events.append({
-                            "date": str(earnings_date) if earnings_date else None,
+                            "date": str(e_date),
                             "symbol": symbol,
                             "company": info.get('shortName', symbol),
                             "quarter": None,
-                            "est_eps": clean(eps_estimate),
-                            "actual_eps": clean(eps_actual),
-                            "est_revenue": None,
+                            "est_eps": clean(eps_est),
+                            "actual_eps": None,
+                            "est_revenue": clean(rev_est),
                             "prior_eps": None,
                             "surprise_pct": None,
-                            "time": "N/A",
+                            "time": "TBD",
                             "market_cap": clean(info.get('marketCap')),
                             "sector": info.get('sector', 'N/A')
                         })
@@ -433,14 +471,25 @@ def get_dividend_calendar():
                     }
 
                 if div_rate or div_yield:
+                    # Infer frequency
+                    freq = "N/A"
+                    if div_hist is not None and len(div_hist) >= 4:
+                        # Check last 4 dividends to see if quarterly or annual
+                        last_4 = div_hist.index[-4:]
+                        diffs = [(last_4[i] - last_4[i-1]).days for i in range(1, 4)]
+                        avg_diff = sum(diffs) / 3
+                        if 80 <= avg_diff <= 100: freq = "Quarterly"
+                        elif 170 <= avg_diff <= 190: freq = "Semi-Annual"
+                        elif 350 <= avg_diff <= 380: freq = "Annual"
+
                     dividends.append({
                         "ex_date": ex_date,
                         "symbol": symbol,
                         "company": info.get('shortName', symbol),
                         "dividend": div_rate,
                         "yield": (div_yield * 100) if div_yield else None,
-                        "frequency": info.get('dividendYield', 'N/A'), # Placeholder
-                        "pay_date": None,
+                        "frequency": freq,
+                        "pay_date": None, # yf info doesn't always have this
                         "record_date": None,
                         "payout_ratio": clean(info.get('payoutRatio')),
                         "sector": info.get('sector', 'N/A')

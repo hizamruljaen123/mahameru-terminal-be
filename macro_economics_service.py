@@ -105,10 +105,21 @@ _CACHE_LOCK = threading.Lock()
 CACHE_TTL = 3600  # 1 hour (macro data changes slowly)
 
 def clean(val):
-    if val is None or (isinstance(val, (float, int, np.floating, np.integer)) and (np.isnan(val) or np.isinf(val))):
+    """Return a JSON-safe float, or None for NaN/Inf/None."""
+    if val is None:
         return None
-    try: return float(val)
-    except: return None
+    try:
+        v = float(val)
+        if np.isnan(v) or np.isinf(v):
+            return None
+        return v
+    except Exception:
+        return None
+
+def safe_row(d: dict) -> dict:
+    """Sanitize every numeric value in a dict so it is JSON-safe."""
+    return {k: (clean(v) if isinstance(v, (float, int, np.floating, np.integer)) else v)
+            for k, v in d.items()}
 
 def _get_cached(key):
     with _CACHE_LOCK:
@@ -170,26 +181,33 @@ def fetch_yf_proxy(proxy_config):
                 return None, None
             history = []
             for ts, r in hist.iterrows():
-                history.append({
+                v = clean(r['Close'])
+                if v is None:
+                    continue
+                history.append(safe_row({
                     "date": ts.strftime('%Y-%m-%d'),
-                    "value": round(float(r['Close']), 4)
-                })
+                    "value": round(v, 4)
+                }))
             return clean(price), history[-60:]
         else:
             t = yf.Ticker(proxy_config['symbol'])
             info = t.info
             price = info.get("regularMarketPrice") or info.get("previousClose")
-            change = info.get("regularMarketChangePercent")
             hist = t.history(period="1y")
             if hist.empty:
                 return None, None
+            first_close = clean(hist['Close'].iloc[0])
             history = []
             for ts, r in hist.iterrows():
-                history.append({
+                v = clean(r['Close'])
+                if v is None:
+                    continue
+                chg = round((v / first_close - 1) * 100, 2) if first_close else None
+                history.append(safe_row({
                     "date": ts.strftime('%Y-%m-%d'),
-                    "value": round(float(r['Close']), 2),
-                    "change": round(float(r['Close'] / hist['Close'].iloc[0] - 1) * 100, 2)
-                })
+                    "value": round(v, 2),
+                    "change": chg
+                }))
             return clean(price), history[-60:]
     except Exception as e:
         log.warning(f"YF_PROXY[{proxy_config['symbol']}]: {e}")
@@ -212,10 +230,10 @@ def get_macro_indicators():
                 if FRED_API_KEY:
                     fred_data = fetch_fred_series(series_id)
                     if fred_data:
-                        current = fred_data[0]['value'] if fred_data else None
-                        prev = fred_data[1]['value'] if len(fred_data) > 1 else None
-                        change = round(current - prev, 2) if current and prev else None
-                        change_pct = round((current - prev) / prev * 100, 2) if current and prev and prev != 0 else None
+                        current = clean(fred_data[0]['value']) if fred_data else None
+                        prev = clean(fred_data[1]['value']) if len(fred_data) > 1 else None
+                        change = clean(current - prev) if current is not None and prev is not None else None
+                        change_pct = clean((current - prev) / prev * 100) if current is not None and prev is not None and prev != 0 else None
 
                         indicators[name] = {
                             "fred_series": series_id,
@@ -223,7 +241,7 @@ def get_macro_indicators():
                             "previous": prev,
                             "change": change,
                             "change_pct": change_pct,
-                            "history": fred_data[:30],
+                            "history": [safe_row(row) for row in fred_data[:30]],
                             "data_source": "FRED"
                         }
                         continue
@@ -326,7 +344,7 @@ def get_central_bank_rates():
                     "proxy_rate": rate,
                     "trend_6m": trend,
                     "policy_stance": policy_stance,
-                    "description": f"{rate:.2f} (proxy)" if rate else "N/A"
+                    "description": f"{rate:.2f} (proxy)" if rate is not None else "N/A"
                 })
             except Exception as e:
                 log.warning(f"CB_RATE[{bank}]: {e}")
