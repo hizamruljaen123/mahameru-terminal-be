@@ -42,7 +42,7 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 from copilot.config import (
     DEBUG, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_MAX_TOKENS,
-    API_BASE, ENABLE_STREAMING, ENABLE_LLM, LOCAL_DEV, logger, clean_port,
+    API_BASE, ENABLE_STREAMING, ENABLE_LLM, LOCAL_DEV, COPILOT_ROOT_PATH, logger, clean_port,
 )
 from copilot.models import ChatMessage, ChatRequest, ChatResponse, SlashCommandRequest, SlashCommandResponse
 from copilot.tools import TOOL_DEFINITIONS
@@ -61,6 +61,7 @@ from copilot.llm import _call_llm, _stream_llm, _execute_tool_plan, _llm_agent_l
 async def lifespan(app: FastAPI):
     """Application lifespan: startup / shutdown."""
     logger.info(f"[BOOT] Mahameru Copilot Gateway starting on port 8500")
+    logger.info(f"[BOOT] Root Path: {COPILOT_ROOT_PATH}")
     logger.info(f"[BOOT] LLM Model: {LLM_MODEL}")
     logger.info(f"[BOOT] LLM Base URL: {LLM_BASE_URL}")
     logger.info(f"[BOOT] API Base: {API_BASE}")
@@ -78,6 +79,7 @@ app = FastAPI(
     description="Enterprise Agentic AI Chatbot for Mahameru Terminal Ecosystem",
     version="2.0.0",
     lifespan=lifespan,
+    root_path=COPILOT_ROOT_PATH,
 )
 
 app.add_middleware(
@@ -248,17 +250,19 @@ async def root():
         "service": "Mahameru Copilot — LLM Gateway",
         "version": "2.0.0",
         "status": "operational",
+        "base_url": "https://api.asetpedia.online/copilot",
         "endpoints": {
-            "chat": "/api/copilot/chat (POST)",
-            "stream": "/api/copilot/stream (POST)",
-            "slash": "/api/copilot/slash (POST)",
-            "research_stream": "/api/copilot/research/stream (GET)",
-            "tools": "/api/copilot/tools (GET)",
-            "health": "/api/copilot/health (GET)",
+            "chat": "/api/copilot/chat",
+            "stream": "/api/copilot/stream",
+            "slash": "/api/copilot/slash",
+            "research_stream": "/api/copilot/research/stream",
+            "tools": "/api/copilot/tools",
+            "health": "/api/copilot/health",
         },
         "llm_model": LLM_MODEL,
         "llm_enabled": ENABLE_LLM,
         "tools_registered": len(TOOL_DEFINITIONS),
+        "environment": "production" if not LOCAL_DEV else "development"
     }
 
 
