@@ -97,9 +97,16 @@ WATCHLIST = [
     "BBNI.JK", "SMGR.JK", "ADRO.JK", "ITMG.JK", "PTBA.JK",
 ]
 
-# Priority groupings for parallel batching
-_US_PRIORITY = WATCHLIST[:30]       # US stocks fetched first
-_ID_PRIORITY = WATCHLIST[30:]       # Indonesian stocks
+def _parse_symbols(symbols_param: str | None = None) -> list[str] | None:
+    """Parse comma-separated symbols from query param.
+    
+    Returns None if not provided (caller should use WATCHLIST fallback).
+    Returns list of stripped uppercase symbols if provided.
+    """
+    if not symbols_param:
+        return None
+    parts = [s.strip().upper() for s in symbols_param.split(",") if s.strip()]
+    return parts if parts else None
 
 # =====================================================================
 # CACHE — Two-tier: endpoint-level + symbol-level
@@ -406,14 +413,17 @@ def _build_insider_signals(all_data: dict[str, dict]) -> dict:
     }
 
 
-def _build_insider_all(all_data: dict[str, dict]) -> dict:
+def _build_insider_all(all_data: dict[str, dict], max_symbols: int = 15) -> dict:
     """Build the flat insider summary for the /insider endpoint."""
     all_trades = []
     total_buys = 0
     total_sells = 0
 
-    # Process up to top-N symbols for performance
-    for symbol, sd in list(all_data.items())[:15]:
+    symbols_to_process = list(all_data.items())
+    # Only limit if user didn't provide custom symbols (heuristic: > 20 = using watchlist)
+    if len(symbols_to_process) > 20:
+        symbols_to_process = symbols_to_process[:max_symbols]
+    for symbol, sd in symbols_to_process:
         tx_df = sd.get("insider_transactions")
         if tx_df is None or tx_df.empty:
             continue
@@ -617,7 +627,8 @@ def _build_dividend_calendar(all_data: dict[str, dict]) -> dict:
                 "sector": info.get("sector", "N/A"),
             })
 
-    dividends.sort(key=lambda x: x.get("yield") or 0, reverse=True)
+    # Sort by dividend yield (descending)
+    dividends.sort(key=lambda x: (x.get("yield") or 0), reverse=True)
     return {
         "dividends": dividends,
         "highest_yield": dividends[:5] if dividends else [],
@@ -654,15 +665,21 @@ def get_insider_trading(symbol: str):
 # 2. Insider Signals (aggregate watchlist)
 # ---------------------------------------------------------------
 @app.get("/api/corporate/insider-signals")
-def get_insider_signals():
-    """Aggregate insider buying/selling signals across watchlist."""
-    cached = _get_ecache("insider_signals")
+def get_insider_signals(symbols: Optional[str] = None):
+    """Aggregate insider buying/selling signals.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT,GOOGL)
+    - If not provided, uses built-in WATCHLIST (top 30).
+    """
+    sym_list = _parse_symbols(symbols) or WATCHLIST[:30]
+    cache_key = f"insider_signals_{'_'.join(sym_list[:5])}"
+    cached = _get_ecache(cache_key)
     if cached:
         return {"status": "success", "data": cached}
 
-    all_data = _fetch_symbols_batch(WATCHLIST[:30], max_workers=10)
+    all_data = _fetch_symbols_batch(sym_list, max_workers=10)
     result = _build_insider_signals(all_data)
-    _set_ecache("insider_signals", result)
+    _set_ecache(cache_key, result)
     return {"status": "success", "data": result}
 
 
@@ -670,15 +687,21 @@ def get_insider_signals():
 # 3. Insider Summary (flat list for frontend)
 # ---------------------------------------------------------------
 @app.get("/api/corporate/insider")
-def get_insider_summary_all():
-    """Aggregate insider trading for the entire watchlist as expected by frontend."""
-    cached = _get_ecache("insider_all")
+def get_insider_summary_all(symbols: Optional[str] = None):
+    """Aggregate insider trading.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
+    - If not provided, uses built-in WATCHLIST (top 15).
+    """
+    sym_list = _parse_symbols(symbols) or WATCHLIST[:15]
+    cache_key = f"insider_all_{'_'.join(sym_list[:5])}"
+    cached = _get_ecache(cache_key)
     if cached:
         return {"status": "success", "data": cached}
 
-    all_data = _fetch_symbols_batch(WATCHLIST[:15], max_workers=10)
+    all_data = _fetch_symbols_batch(sym_list, max_workers=10)
     result = _build_insider_all(all_data)
-    _set_ecache("insider_all", result)
+    _set_ecache(cache_key, result)
     return {"status": "success", "data": result}
 
 
@@ -686,22 +709,31 @@ def get_insider_summary_all():
 # 4. Analyst Changes
 # ---------------------------------------------------------------
 @app.get("/api/corporate/analyst")
-def get_analyst_changes_fe():
-    """Alias returning flat list for frontend."""
-    res = get_analyst_changes()
+def get_analyst_changes_fe(symbols: Optional[str] = None):
+    """Alias returning flat list for frontend.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
+    """
+    res = get_analyst_changes(symbols)
     return {"status": "success", "data": res.get("data", {}).get("recent_changes", [])}
 
 
 @app.get("/api/corporate/analyst-changes")
-def get_analyst_changes():
-    """Recent analyst upgrades/downgrades for watchlist symbols."""
-    cached = _get_ecache("analyst_changes")
+def get_analyst_changes(symbols: Optional[str] = None):
+    """Recent analyst upgrades/downgrades.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT,GOOGL)
+    - If not provided, uses built-in WATCHLIST (top 20).
+    """
+    sym_list = _parse_symbols(symbols) or WATCHLIST[:20]
+    cache_key = f"analyst_changes_{'_'.join(sym_list[:5])}"
+    cached = _get_ecache(cache_key)
     if cached:
         return {"status": "success", "data": cached}
 
-    all_data = _fetch_symbols_batch(WATCHLIST[:20], max_workers=10)
+    all_data = _fetch_symbols_batch(sym_list, max_workers=10)
     result = _build_analyst_changes(all_data)
-    _set_ecache("analyst_changes", result)
+    _set_ecache(cache_key, result)
     return {"status": "success", "data": result}
 
 
@@ -709,22 +741,31 @@ def get_analyst_changes():
 # 5. Earnings Calendar
 # ---------------------------------------------------------------
 @app.get("/api/corporate/earnings")
-def get_earnings_calendar_fe():
-    """Alias returning flat list for frontend."""
-    res = get_earnings_calendar()
+def get_earnings_calendar_fe(symbols: Optional[str] = None):
+    """Alias returning flat list for frontend.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
+    """
+    res = get_earnings_calendar(symbols)
     return {"status": "success", "data": res.get("data", {}).get("upcoming_earnings", [])}
 
 
 @app.get("/api/corporate/earnings-calendar")
-def get_earnings_calendar():
-    """Upcoming earnings dates for watchlist."""
-    cached = _get_ecache("earnings_calendar")
+def get_earnings_calendar(symbols: Optional[str] = None):
+    """Upcoming earnings dates.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
+    - If not provided, uses full built-in WATCHLIST.
+    """
+    sym_list = _parse_symbols(symbols) or WATCHLIST
+    cache_key = f"earnings_{'_'.join(sym_list[:5])}"
+    cached = _get_ecache(cache_key)
     if cached:
         return {"status": "success", "data": cached}
 
-    all_data = _fetch_symbols_batch(WATCHLIST, max_workers=12)
+    all_data = _fetch_symbols_batch(sym_list, max_workers=12)
     result = _build_earnings_calendar(all_data)
-    _set_ecache("earnings_calendar", result)
+    _set_ecache(cache_key, result)
     return {"status": "success", "data": result}
 
 
@@ -732,22 +773,31 @@ def get_earnings_calendar():
 # 6. Dividend Calendar
 # ---------------------------------------------------------------
 @app.get("/api/corporate/dividends")
-def get_dividend_calendar_fe():
-    """Alias returning flat list for frontend."""
-    res = get_dividend_calendar()
+def get_dividend_calendar_fe(symbols: Optional[str] = None):
+    """Alias returning flat list for frontend.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
+    """
+    res = get_dividend_calendar(symbols)
     return {"status": "success", "data": res.get("data", {}).get("dividends", [])}
 
 
 @app.get("/api/corporate/dividend-calendar")
-def get_dividend_calendar():
-    """Upcoming ex-dividend dates and dividend history."""
-    cached = _get_ecache("dividend_calendar")
+def get_dividend_calendar(symbols: Optional[str] = None):
+    """Upcoming ex-dividend dates and dividend history.
+    
+    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
+    - If not provided, uses full built-in WATCHLIST.
+    """
+    sym_list = _parse_symbols(symbols) or WATCHLIST
+    cache_key = f"dividends_{'_'.join(sym_list[:5])}"
+    cached = _get_ecache(cache_key)
     if cached:
         return {"status": "success", "data": cached}
 
-    all_data = _fetch_symbols_batch(WATCHLIST, max_workers=12)
+    all_data = _fetch_symbols_batch(sym_list, max_workers=12)
     result = _build_dividend_calendar(all_data)
-    _set_ecache("dividend_calendar", result)
+    _set_ecache(cache_key, result)
     return {"status": "success", "data": result}
 
 
@@ -800,6 +850,48 @@ def get_corporate_summary(symbol: str):
 @app.get("/health")
 def health():
     return {"status": "corporate_intel_service_online", "timestamp": int(time.time())}
+
+
+# ---------------------------------------------------------------
+# Debug — check what data yfinance returns for a symbol
+# ---------------------------------------------------------------
+@app.get("/api/corporate/check/{symbol}")
+def debug_check_symbol(symbol: str):
+    """Debug endpoint: shows what raw data yfinance returns for a symbol.
+    Helps diagnose why data might be null.
+    """
+    sd = _fetch_symbol_info(symbol)
+    if sd is None:
+        return {"status": "error", "symbol": symbol, "message": "Could not fetch any data"}
+
+    info = sd.get("info", {})
+    insider_tx = sd.get("insider_transactions")
+    insider_pur = sd.get("insider_purchases")
+    calendar = sd.get("calendar")
+    dividends = sd.get("dividends")
+    recs = sd.get("recommendations")
+    upgrades = sd.get("upgrades_downgrades")
+
+    return {
+        "status": "success",
+        "symbol": symbol,
+        "company_name": info.get("longName") or info.get("shortName"),
+        "sector": info.get("sector"),
+        "industry": info.get("industry"),
+        "has_info": bool(info and len(info) > 5),
+        "info_keys": list(info.keys())[:30] if info else [],
+        "has_insider_transactions": insider_tx is not None and not insider_tx.empty,
+        "insider_tx_rows": len(insider_tx) if insider_tx is not None and not insider_tx.empty else 0,
+        "has_insider_purchases": insider_pur is not None and not insider_pur.empty,
+        "has_calendar": calendar is not None and not isinstance(calendar, list),
+        "calendar_type": str(type(calendar).__name__),
+        "has_dividends": dividends is not None and not dividends.empty,
+        "dividend_count": len(dividends) if dividends is not None and not dividends.empty else 0,
+        "has_recommendations": recs is not None and not recs.empty,
+        "has_upgrades_downgrades": upgrades is not None and not upgrades.empty,
+        "price": clean(info.get("regularMarketPrice") or info.get("previousClose")),
+        "market_cap": clean(info.get("marketCap")),
+    }
 
 
 # =====================================================================
