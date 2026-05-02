@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import yfinance as yf
@@ -11,6 +15,8 @@ import time
 
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import threading
+
+from db import  get_db_connection
 
 app = Flask(__name__)
 CORS(app)
@@ -1258,6 +1264,61 @@ def get_market_movers(index_symbol):
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════
+#  Annual Report Highlight API
+# ═══════════════════════════════════════════════════════════
+
+@app.route('/api/entity/annual-report/<symbol>')
+def get_annual_report_data(symbol):
+    
+    try:
+        symbol = symbol.upper().strip()
+        # Ambil daftar report untuk ticker ini (dengan highlight_json)
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("""
+                SELECT id, kode_perusahaan, nama_perusahaan, tahun_report,
+                       link_report, Sector, highlight_json, created_at, updated_at
+                FROM annual_reports
+                WHERE kode_perusahaan = %s
+                ORDER BY tahun_report DESC
+            """, (symbol,))
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        if not rows:
+            return jsonify({
+                "exists": False,
+                "ticker": symbol,
+                "reports": []
+            })
+
+        # Parse highlight_json for each row
+        for row in rows:
+            if row.get('highlight_json') and isinstance(row['highlight_json'], str):
+                try:
+                    row['highlight_json'] = json.loads(row['highlight_json'])
+                except (json.JSONDecodeError, TypeError):
+                    pass  # biarkan string mentah
+            # Convert datetime objects to strings
+            for key in ('created_at', 'updated_at'):
+                if row.get(key) and hasattr(row[key], 'isoformat'):
+                    row[key] = row[key].isoformat()
+
+        return jsonify({
+            "exists": True,
+            "ticker": symbol,
+            "reports": rows
+        })
+
+    except Exception as e:
+        print(f"[ANNUAL_REPORT_API] Error for {symbol}: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     socketio.run(app, host=os.getenv('API_HOST', '0.0.0.0'), port=5005, debug=True, allow_unsafe_werkzeug=True)
