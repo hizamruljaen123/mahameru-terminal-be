@@ -4,3 +4,4 @@ logs/
 __pycache__/
 *.py[cod]
 data/news_cache.db
+launcher_local.py
