@@ -52,6 +52,7 @@ TIER1 = [
     [PYTHON_EXE, get_p("ta_service.py")],             # Port 5007
     [PYTHON_EXE, get_p("deep_ta_service.py")],        # Port 5200
     [PYTHON_EXE, get_p("research_service.py"), "--port", "5202"], # Port 5202
+    [PYTHON_EXE, get_p("price_intelligence_service.py")], # Port 8170
     [PYTHON_EXE, get_p("copilot_gateway.py")],        # Port 8500 — LLM Agentic Gateway
 ]
 
@@ -93,7 +94,6 @@ TIER3 = [
     [PYTHON_EXE, get_p("oil_trade_service.py")],      # Port 8090
     [PYTHON_EXE, get_p("gnews_service.py")],          # Port 5006
     [PYTHON_EXE, get_p("vessel_intelligence_service.py")], # Port 8100 — Phase 4/5 Signal Engine
-    [PYTHON_EXE, get_p("price_intelligence_service.py")], # Port 8170
     # NEW TIER 3 SERVICES (OSINT Expansion)
     [PYTHON_EXE, get_p("regime_service.py")],          # Port 8195
     [PYTHON_EXE, get_p("esg_service.py")],             # Port 8190
