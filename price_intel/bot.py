@@ -290,6 +290,10 @@ class PriceIntelligenceBot:
                 "<code>/mt_sentiment</code>     [ENT] Entity sentiment analysis\n"
                 "<code>/mt_entity_map</code>    [ENT] Corporate correlation map\n\n"
                 
+                "<b>── UTILITIES ──</b>\n"
+                "<code>/mt_get_id</code>       📍 Get current Chat ID\n"
+                "<code>/mt_help</code>         ❓ Show this help menu\n\n"
+                
                 "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
                 "<i>Use yfinance symbols (e.g. .JK for IHSG, -USD for Crypto).</i>"
             )
@@ -301,6 +305,9 @@ class PriceIntelligenceBot:
                 self.task_queue.put(("news", keyword, chat_id))
             else:
                 self.send_message(chat_id, "ℹ️ Usage: <code>/mt_news [KATA KUNCI]</code>")
+
+        elif cmd == "/mt_get_id":
+            self.send_message(chat_id, f"📍 <b>CHAT ID</b>\n\n<code>{chat_id}</code>\n\n<i>Set this as TELEGRAM_CHAT_ID in your .env if needed.</i>")
 
         # --- NEW DISPATCHER MAPPINGS ---
         elif cmd == "/mt_crypto_pulse": handle_mt_crypto_pulse(chat_id)
