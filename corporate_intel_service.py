@@ -85,28 +85,15 @@ def _make_ticker(symbol: str) -> yf.Ticker:
     return t
 
 
-# =====================================================================
-# WATCHLIST
-# =====================================================================
-WATCHLIST = [
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
-    "BRK-B", "JPM", "V", "JNJ", "WMT", "MA", "PG", "UNH",
-    "HD", "DIS", "BAC", "NFLX", "ADBE", "CRM", "AMD", "INTC",
-    "PYPL", "SQ", "COIN", "MSTR", "PLTR", "SNOW", "DDOG",
-    "TLKM.JK", "BBCA.JK", "BBRI.JK", "BMRI.JK", "ASII.JK", "ICBP.JK", "GOTO.JK",
-    "BBNI.JK", "SMGR.JK", "ADRO.JK", "ITMG.JK", "PTBA.JK",
-]
-
-def _parse_symbols(symbols_param: str | None = None) -> list[str] | None:
+def _parse_symbols(symbols_param: str | None = None) -> list[str]:
     """Parse comma-separated symbols from query param.
     
-    Returns None if not provided (caller should use WATCHLIST fallback).
-    Returns list of stripped uppercase symbols if provided.
+    Returns list of uppercase symbols, or empty list if none provided.
     """
     if not symbols_param:
-        return None
+        return []
     parts = [s.strip().upper() for s in symbols_param.split(",") if s.strip()]
-    return parts if parts else None
+    return parts if parts else []
 
 # =====================================================================
 # CACHE — Two-tier: endpoint-level + symbol-level
@@ -280,19 +267,11 @@ def _fetch_symbols_batch(symbols: list[str], max_workers: int = 8) -> dict[str, 
 # BACKGROUND CACHE WARMER
 # =====================================================================
 def _warm_cache():
-    """Periodically pre-fetch top watchlist symbols so endpoints are fast."""
+    """Cache warmer disabled — symbols are user-provided via query params."""
     global _WARMER_THREAD
-    while True:
-        try:
-            log.info("🔄 Cache warmer: pre-fetching top watchlist symbols …")
-            top = WATCHLIST[:15]
-            _fetch_symbols_batch(top, max_workers=10)
-            log.info(f"✅ Cache warmer: {len(top)} symbols cached")
-        except Exception as e:
-            log.warning(f"Cache warmer error: {e}")
-        with _WARMER_LOCK:
-            _WARMER_THREAD = None
-            break  # single pass; caller re-schedules or starts again
+    log.info("ℹ️ Cache warmer skipped (user provides symbols via ?symbols=)")
+    with _WARMER_LOCK:
+        _WARMER_THREAD = None
 
 
 def _ensure_warmer():
@@ -668,10 +647,10 @@ def get_insider_trading(symbol: str):
 def get_insider_signals(symbols: Optional[str] = None):
     """Aggregate insider buying/selling signals.
     
-    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT,GOOGL)
-    - If not provided, uses built-in WATCHLIST (top 30).
+    - symbols: comma-separated tickers (e.g. ?symbols=AAPL,MSFT,GOOGL)
+    - Required: returns empty result if not provided.
     """
-    sym_list = _parse_symbols(symbols) or WATCHLIST[:30]
+    sym_list = _parse_symbols(symbols)
     cache_key = f"insider_signals_{'_'.join(sym_list[:5])}"
     cached = _get_ecache(cache_key)
     if cached:
@@ -690,10 +669,10 @@ def get_insider_signals(symbols: Optional[str] = None):
 def get_insider_summary_all(symbols: Optional[str] = None):
     """Aggregate insider trading.
     
-    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
-    - If not provided, uses built-in WATCHLIST (top 15).
+    - symbols: comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
+    - Required: returns empty result if not provided.
     """
-    sym_list = _parse_symbols(symbols) or WATCHLIST[:15]
+    sym_list = _parse_symbols(symbols)
     cache_key = f"insider_all_{'_'.join(sym_list[:5])}"
     cached = _get_ecache(cache_key)
     if cached:
@@ -722,10 +701,10 @@ def get_analyst_changes_fe(symbols: Optional[str] = None):
 def get_analyst_changes(symbols: Optional[str] = None):
     """Recent analyst upgrades/downgrades.
     
-    - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT,GOOGL)
-    - If not provided, uses built-in WATCHLIST (top 20).
+    - symbols: comma-separated tickers (e.g. ?symbols=AAPL,MSFT,GOOGL)
+    - Required: returns empty result if not provided.
     """
-    sym_list = _parse_symbols(symbols) or WATCHLIST[:20]
+    sym_list = _parse_symbols(symbols)
     cache_key = f"analyst_changes_{'_'.join(sym_list[:5])}"
     cached = _get_ecache(cache_key)
     if cached:
@@ -755,9 +734,11 @@ def get_earnings_calendar(symbols: Optional[str] = None):
     """Upcoming earnings dates.
     
     - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
-    - If not provided, uses full built-in WATCHLIST.
+    - If not provided, returns empty result.
     """
-    sym_list = _parse_symbols(symbols) or WATCHLIST
+    sym_list = _parse_symbols(symbols)
+    if not sym_list:
+        return {"status": "success", "data": {"upcoming_earnings": [], "total": 0, "last_updated": int(time.time())}}
     cache_key = f"earnings_{'_'.join(sym_list[:5])}"
     cached = _get_ecache(cache_key)
     if cached:
@@ -787,9 +768,11 @@ def get_dividend_calendar(symbols: Optional[str] = None):
     """Upcoming ex-dividend dates and dividend history.
     
     - symbols: optional comma-separated tickers (e.g. ?symbols=AAPL,MSFT)
-    - If not provided, uses full built-in WATCHLIST.
+    - If not provided, returns empty result.
     """
-    sym_list = _parse_symbols(symbols) or WATCHLIST
+    sym_list = _parse_symbols(symbols)
+    if not sym_list:
+        return {"status": "success", "data": {"dividends": [], "total": 0, "last_updated": int(time.time())}}
     cache_key = f"dividends_{'_'.join(sym_list[:5])}"
     cached = _get_ecache(cache_key)
     if cached:
