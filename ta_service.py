@@ -249,6 +249,7 @@ def calculate_all(df, include=None):
     
     def should_calc(key):
         if include is None: return True
+        if 'all' in include: return True
         return key in include
 
     # --- Moving Averages ---
