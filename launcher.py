@@ -52,6 +52,7 @@ TIER1 = [
     [PYTHON_EXE, get_p("ta_service.py")],             # Port 5007
     [PYTHON_EXE, get_p("deep_ta_service.py")],        # Port 5200
     [PYTHON_EXE, get_p("research_service.py"), "--port", "5202"], # Port 5202
+    [PYTHON_EXE, get_p("copilot_gateway.py")],        # Port 8500 — LLM Agentic Gateway
 ]
 
 # TIER 2: Geo-Sensing & Special Data
@@ -116,6 +117,7 @@ SERVICE_PORTS = {
     "ta_service.py": [5007],
     "deep_ta_service.py": [5200],
     "research_service.py": [5202],
+    "copilot_gateway.py": [8500],
     "sky_service.py": [5002],
     "ais_service.py": [8080],
     "geo_data_service.py": [8091],
@@ -282,6 +284,7 @@ def main():
             [PYTHON_EXE, get_p("price_intelligence_service.py")],
             [PYTHON_EXE, get_p("ta_service.py")],
             [PYTHON_EXE, get_p("research_service.py"), "--port", "5202"],
+            [PYTHON_EXE, get_p("copilot_gateway.py")],  # Port 8500 — LLM Agentic Gateway
         ]
     else:
         WAVES = [TIER0, TIER1, TIER2, TIER3, TIER4, TIER5]
