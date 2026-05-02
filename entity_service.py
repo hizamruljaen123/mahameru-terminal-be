@@ -1283,9 +1283,9 @@ def get_annual_report_data(symbol):
                 SELECT id, kode_perusahaan, nama_perusahaan, tahun_report,
                        link_report, Sector, highlight_json, created_at, updated_at
                 FROM annual_reports
-                WHERE kode_perusahaan = %s
+                WHERE kode_perusahaan LIKE %s
                 ORDER BY tahun_report DESC
-            """, (symbol,))
+            """, (f"%{symbol}%",))
             rows = cur.fetchall()
         finally:
             conn.close()
