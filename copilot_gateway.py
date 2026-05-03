@@ -379,10 +379,8 @@ async def chat_stream(request: ChatRequest):
                     t_label = t_name.replace("get_", "").replace("run_", "").replace("_", " ").upper()
                     ok = tr.get("success", False)
                     
-                    if ok:
-                        yield f"event: reasoning\ndata: {json.dumps({'content': f'✅ {t_label} data acquired and analyzed.\\n'})}\n\n"
-                    else:
-                        yield f"event: reasoning\ndata: {json.dumps({'content': f'⚠️ {t_label} failed: {tr.get(\"error\", \"Unknown error\")}\\n'})}\n\n"
+                    status_msg = f'✅ {t_label} data acquired and analyzed.\n' if ok else f'⚠️ {t_label} failed: {tr.get("error", "Unknown error")}\n'
+                    yield f"event: reasoning\ndata: {json.dumps({'content': status_msg})}\n\n"
                     
                     # VERY IMPORTANT: Add results to message history for final synthesis
                     full_messages.append({
