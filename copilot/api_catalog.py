@@ -415,7 +415,7 @@ MICROSERVICE_ROUTES: Dict[str, str] = {
 }
 
 # Route templates for parameterized endpoints
-TA_API_BASE = "http://127.0.0.1:5007" if LOCAL_DEV else "{base}"
+TA_API_BASE = "http://127.0.0.1:5007" if LOCAL_DEV else "{base}/ta"
 
 MICROSERVICE_ROUTE_TEMPLATES: Dict[str, str] = {
     "get_market_quote":          "{base}/market/api/market/price?symbol={symbol}",
