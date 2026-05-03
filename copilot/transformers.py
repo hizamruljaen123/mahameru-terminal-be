@@ -385,67 +385,149 @@ def _transform_technical_analysis(tool: str, data: Dict[str, Any]) -> List[Dict[
 
 
 def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Transform OHLCV data into an ECharts candlestick chart."""
-    ohlcv = data.get("ohlcv", data.get("history", []))
-    if not isinstance(ohlcv, list) or len(ohlcv) == 0:
-        return [{"type": "markdown", "data": f"No historical data for {symbol}"}]
+    """
+    Transform OHLCV and Indicator data into a professional multi-line ECharts suite.
+    Returns a list of components: [Advanced Price Chart, MACD Chart].
+    """
+    ohlcv_obj = data.get("ohlcv", {})
+    if not ohlcv_obj or not ohlcv_obj.get("close"):
+        # Fallback to older format if necessary
+        history = data.get("history", [])
+        if not history:
+            return [{"type": "markdown", "data": f"No historical data for {symbol}"}]
+        # Convert list of dicts to dict of lists
+        ohlcv_obj = {
+            "date": [row.get("date", row.get("Date")) for row in history],
+            "open": [row.get("open", row.get("Open")) for row in history],
+            "high": [row.get("high", row.get("High")) for row in history],
+            "low": [row.get("low", row.get("Low")) for row in history],
+            "close": [row.get("close", row.get("Close")) for row in history],
+            "volume": [row.get("volume", row.get("Volume")) for row in history],
+        }
 
-    dates = []
-    ohlc_data = []
-    volume_data = []
+    dates = ohlcv_obj.get("date", [])
+    close = ohlcv_obj.get("close", [])
+    open_p = ohlcv_obj.get("open", [])
+    low = ohlcv_obj.get("low", [])
+    high = ohlcv_obj.get("high", [])
+    volume = ohlcv_obj.get("volume", [])
     
-    # Take last 200 candles for a clean view
-    for row in ohlcv[-200:]:
-        if isinstance(row, dict):
-            dates.append(row.get("date", row.get("Date", "")))
-            ohlc_data.append([
-                row.get("open", row.get("Open", 0)),
-                row.get("close", row.get("Close", 0)),
-                row.get("low", row.get("Low", 0)),
-                row.get("high", row.get("High", 0)),
-            ])
-            vol = row.get("volume", row.get("Volume", 0))
-            volume_data.append(float(vol) if vol else 0)
+    # Trim to last 150-200 for better mobile/sidebar visibility
+    limit = 150
+    dates = dates[-limit:]
+    ohlc_data = []
+    for i in range(max(0, len(close)-limit), len(close)):
+        ohlc_data.append([open_p[i], close[i], low[i], high[i]])
+    
+    vol_data = []
+    for i in range(max(0, len(volume)-limit), len(volume)):
+        vol_data.append({
+            "value": volume[i],
+            "itemStyle": {"color": "#26a69a44" if close[i] >= open_p[i] else "#ef535044"}
+        })
 
-    option = {
-        "title": {"text": f"{symbol} Price Action", "left": "center", "textStyle": {"color": "#e0e0e0", "fontSize": 14}},
+    indicators = data.get("indicators", {})
+    
+    def get_series(ind_group, key=None, name="Line", color="#fff", width=1, dash="solid"):
+        arr = ind_group
+        if key and isinstance(ind_group, dict): arr = ind_group.get(key, [])
+        if not arr or not isinstance(arr, list): return None
+        return {
+            "name": name, "type": "line", "data": arr[-limit:], "smooth": True, "showSymbol": False,
+            "lineStyle": {"width": width, "color": color, "type": dash, "opacity": 0.8},
+            "z": 3
+        }
+
+    # 1. PRICE ACTION CHART (Candlestick + Overlays + Volume)
+    price_series = [
+        {
+            "name": "Price", "type": "candlestick", "data": ohlc_data,
+            "itemStyle": {"color": "#26a69a", "color0": "#ef5350", "borderColor": "#26a69a", "borderColor0": "#ef5350"},
+            "xAxisIndex": 0, "yAxisIndex": 0,
+        },
+        {
+            "name": "Volume", "type": "bar", "data": vol_data,
+            "xAxisIndex": 1, "yAxisIndex": 1,
+        }
+    ]
+
+    # Overlays
+    overlays = [
+        (indicators.get("sma", {}), "sma20", "SMA 20", "#ffeb3b", 1.2),
+        (indicators.get("sma", {}), "sma50", "SMA 50", "#f97316", 1.0, "dashed"),
+        (indicators.get("sma", {}), "sma100", "SMA 100", "#0ea5e9", 1.0),
+        (indicators.get("ema", {}), "ema9", "EMA 9", "#e040fb", 1.0),
+        (indicators.get("bb", {}), "upper", "BB Upper", "#64748b", 0.8, "dotted"),
+        (indicators.get("bb", {}), "lower", "BB Lower", "#64748b", 0.8, "dotted"),
+    ]
+    for grp, key, name, color, width, *dash in overlays:
+        s = get_series(grp, key, name, color, width, dash[0] if dash else "solid")
+        if s: price_series.append(s)
+
+    price_option = {
+        "backgroundColor": "transparent",
+        "animation": False,
         "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+        "axisPointer": {"link": [{"xAxisIndex": "all"}]},
         "grid": [
-            {"left": "10%", "right": "10%", "top": "15%", "height": "50%"},
-            {"left": "10%", "right": "10%", "top": "70%", "height": "15%"}
+            {"left": "5%", "right": "12%", "top": "10%", "height": "65%"},
+            {"left": "5%", "right": "12%", "top": "78%", "height": "12%"}
         ],
         "xAxis": [
-            {"type": "category", "data": dates, "gridIndex": 0, "axisLabel": {"color": "#888", "fontSize": 10, "rotate": 30}},
-            {"type": "category", "data": dates, "gridIndex": 1, "axisLabel": {"show": False}}
+            {"type": "category", "data": dates, "gridIndex": 0, "axisLine": {"show": False}, "axisLabel": {"show": False}, "splitLine": {"show": False}},
+            {"type": "category", "data": dates, "gridIndex": 1, "axisLabel": {"color": "#666", "fontSize": 9}, "splitLine": {"show": False}}
         ],
         "yAxis": [
-            {"type": "value", "scale": True, "gridIndex": 0, "axisLabel": {"color": "#888", "fontSize": 10}},
-            {"type": "value", "gridIndex": 1, "axisLabel": {"show": False}, "splitLine": {"show": False}}
+            {"type": "value", "scale": True, "gridIndex": 0, "position": "right", "axisLabel": {"color": "#888", "fontSize": 9}, "splitLine": {"lineStyle": {"color": "#1e1e1e"}}},
+            {"type": "value", "gridIndex": 1, "show": False}
         ],
-        "series": [
-            {
-                "name": "Price",
-                "type": "candlestick",
-                "data": ohlc_data,
-                "itemStyle": {"color": "#26a69a", "color0": "#ef5350", "borderColor": "#26a69a", "borderColor0": "#ef5350"},
-                "xAxisIndex": 0, "yAxisIndex": 0,
-            },
-            {
-                "name": "Volume",
-                "type": "bar",
-                "data": volume_data,
-                "xAxisIndex": 1, "yAxisIndex": 1,
-                "itemStyle": {"color": "rgba(255, 255, 255, 0.15)"}
-            }
-        ],
-        "dataZoom": [{"type": "inside", "xAxisIndex": [0, 1], "start": 50, "end": 100}]
+        "series": price_series,
+        "dataZoom": [{"type": "inside", "xAxisIndex": [0, 1], "start": 30, "end": 100}]
     }
 
-    return [{
-        "type": "chart",
-        "engine": "echarts",
-        "options": option
-    }]
+    # 2. MACD CHART
+    macd = indicators.get("macd", {})
+    macd_series = []
+    if macd:
+        line = macd.get("line", [])[-limit:]
+        sig = macd.get("signal", [])[-limit:]
+        hist = macd.get("hist", [])[-limit:]
+        
+        macd_series = [
+            {"name": "MACD", "type": "line", "data": line, "smooth": True, "showSymbol": False, "lineStyle": {"width": 1.5, "color": "#0ea5e9"}},
+            {"name": "Signal", "type": "line", "data": sig, "smooth": True, "showSymbol": False, "lineStyle": {"width": 1.5, "color": "#f97316"}},
+            {
+                "name": "Histogram", "type": "bar", "data": hist,
+                "itemStyle": {
+                    "color": "#26a69a" # Will use color callback in frontend if needed, but here we set static
+                }
+            }
+        ]
+
+    macd_option = {
+        "backgroundColor": "transparent",
+        "animation": False,
+        "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+        "grid": {"left": "5%", "right": "12%", "top": "15%", "bottom": "15%"},
+        "xAxis": {"type": "category", "data": dates, "axisLabel": {"color": "#666", "fontSize": 9}},
+        "yAxis": {"type": "value", "position": "right", "axisLabel": {"color": "#888", "fontSize": 9}, "splitLine": {"lineStyle": {"color": "#1e1e1e"}}},
+        "series": macd_series
+    }
+
+    return [
+        {
+            "title": "Advanced Chart",
+            "type": "chart",
+            "engine": "echarts",
+            "options": price_option
+        },
+        {
+            "title": "MACD",
+            "type": "chart",
+            "engine": "echarts",
+            "options": macd_option
+        }
+    ]
 
 
 # ---------------------------------------------------------------------------
