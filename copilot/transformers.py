@@ -98,6 +98,7 @@ def _build_rich_response(
             remaining_results.append(result)
 
     # 3. Process grouped comparisons
+    tool_tabs = []
     for title, group_data in groups.items():
         if len(group_data) > 1:
             # Create a unified comparison table
