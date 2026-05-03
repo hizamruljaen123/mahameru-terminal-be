@@ -386,16 +386,14 @@ def _transform_technical_analysis(tool: str, data: Dict[str, Any]) -> List[Dict[
 
 def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Transform OHLCV and Indicator data into a professional multi-line ECharts suite.
-    Returns a list of components: [Advanced Price Chart, MACD Chart].
+    Transform OHLCV and Indicator data into a categorized professional chart suite.
+    Returns a list of tab components organized by indicator type.
     """
     ohlcv_obj = data.get("ohlcv", {})
     if not ohlcv_obj or not ohlcv_obj.get("close"):
-        # Fallback to older format if necessary
         history = data.get("history", [])
         if not history:
             return [{"type": "markdown", "data": f"No historical data for {symbol}"}]
-        # Convert list of dicts to dict of lists
         ohlcv_obj = {
             "date": [row.get("date", row.get("Date")) for row in history],
             "open": [row.get("open", row.get("Open")) for row in history],
@@ -412,7 +410,6 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
     high = ohlcv_obj.get("high", [])
     volume = ohlcv_obj.get("volume", [])
     
-    # Trim to last 150-200 for better mobile/sidebar visibility
     limit = 150
     dates = dates[-limit:]
     ohlc_data = []
@@ -428,34 +425,29 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
 
     indicators = data.get("indicators", {})
     
-    def get_series(ind_group, key=None, name="Line", color="#fff", width=1, dash="solid"):
+    def get_series(ind_group, key=None, name="Line", color="#fff", width=1, dash="solid", type="line", y_axis=0):
         arr = ind_group
         if key and isinstance(ind_group, dict): arr = ind_group.get(key, [])
         if not arr or not isinstance(arr, list): return None
         return {
-            "name": name, "type": "line", "data": arr[-limit:], "smooth": True, "showSymbol": False,
+            "name": name, "type": type, "data": arr[-limit:], "smooth": True, "showSymbol": False,
             "lineStyle": {"width": width, "color": color, "type": dash, "opacity": 0.8},
-            "z": 3
+            "yAxisIndex": y_axis, "z": 3
         }
 
-    # 1. PRICE ACTION CHART (Candlestick + Overlays + Volume)
+    common_xAxis = {"type": "category", "data": dates, "axisLabel": {"color": "#666", "fontSize": 9}, "splitLine": {"show": False}}
+    common_yAxis = {"type": "value", "position": "right", "axisLabel": {"color": "#888", "fontSize": 9}, "splitLine": {"lineStyle": {"color": "#1e1e1e"}}, "scale": True}
+
+    chart_tabs = []
+
+    # 1. TAB: MAIN (Price + Overlays)
     price_series = [
-        {
-            "name": "Price", "type": "candlestick", "data": ohlc_data,
-            "itemStyle": {"color": "#26a69a", "color0": "#ef5350", "borderColor": "#26a69a", "borderColor0": "#ef5350"},
-            "xAxisIndex": 0, "yAxisIndex": 0,
-        },
-        {
-            "name": "Volume", "type": "bar", "data": vol_data,
-            "xAxisIndex": 1, "yAxisIndex": 1,
-        }
+        {"name": "Price", "type": "candlestick", "data": ohlc_data, "itemStyle": {"color": "#26a69a", "color0": "#ef5350", "borderColor": "#26a69a", "borderColor0": "#ef5350"}},
+        {"name": "Volume", "type": "bar", "data": vol_data, "xAxisIndex": 1, "yAxisIndex": 1}
     ]
-
-    # Overlays
     overlays = [
         (indicators.get("sma", {}), "sma20", "SMA 20", "#ffeb3b", 1.2),
         (indicators.get("sma", {}), "sma50", "SMA 50", "#f97316", 1.0, "dashed"),
-        (indicators.get("sma", {}), "sma100", "SMA 100", "#0ea5e9", 1.0),
         (indicators.get("ema", {}), "ema9", "EMA 9", "#e040fb", 1.0),
         (indicators.get("bb", {}), "upper", "BB Upper", "#64748b", 0.8, "dotted"),
         (indicators.get("bb", {}), "lower", "BB Lower", "#64748b", 0.8, "dotted"),
@@ -464,70 +456,90 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
         s = get_series(grp, key, name, color, width, dash[0] if dash else "solid")
         if s: price_series.append(s)
 
-    price_option = {
-        "backgroundColor": "transparent",
-        "animation": False,
-        "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
-        "axisPointer": {"link": [{"xAxisIndex": "all"}]},
-        "grid": [
-            {"left": "5%", "right": "12%", "top": "10%", "height": "65%"},
-            {"left": "5%", "right": "12%", "top": "78%", "height": "12%"}
-        ],
-        "xAxis": [
-            {"type": "category", "data": dates, "gridIndex": 0, "axisLine": {"show": False}, "axisLabel": {"show": False}, "splitLine": {"show": False}},
-            {"type": "category", "data": dates, "gridIndex": 1, "axisLabel": {"color": "#666", "fontSize": 9}, "splitLine": {"show": False}}
-        ],
-        "yAxis": [
-            {"type": "value", "scale": True, "gridIndex": 0, "position": "right", "axisLabel": {"color": "#888", "fontSize": 9}, "splitLine": {"lineStyle": {"color": "#1e1e1e"}}},
-            {"type": "value", "gridIndex": 1, "show": False}
-        ],
-        "series": price_series,
-        "dataZoom": [{"type": "inside", "xAxisIndex": [0, 1], "start": 30, "end": 100}]
-    }
+    chart_tabs.append({
+        "title": "Price Chart",
+        "type": "chart",
+        "engine": "echarts",
+        "options": {
+            "backgroundColor": "transparent", "animation": False,
+            "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+            "grid": [{"left": "5%", "right": "12%", "top": "10%", "height": "65%"}, {"left": "5%", "right": "12%", "top": "78%", "height": "12%"}],
+            "xAxis": [{"type": "category", "data": dates, "gridIndex": 0, "axisLabel": {"show": False}}, {"type": "category", "data": dates, "gridIndex": 1, "axisLabel": {"color": "#666", "fontSize": 9}}],
+            "yAxis": [common_yAxis, {"type": "value", "gridIndex": 1, "show": False}],
+            "series": price_series,
+            "dataZoom": [{"type": "inside", "xAxisIndex": [0, 1], "start": 30, "end": 100}]
+        }
+    })
 
-    # 2. MACD CHART
+    # 2. TAB: TREND (MACD + ADX)
+    trend_series = []
     macd = indicators.get("macd", {})
-    macd_series = []
     if macd:
-        line = macd.get("line", [])[-limit:]
-        sig = macd.get("signal", [])[-limit:]
-        hist = macd.get("hist", [])[-limit:]
-        
-        macd_series = [
-            {"name": "MACD", "type": "line", "data": line, "smooth": True, "showSymbol": False, "lineStyle": {"width": 1.5, "color": "#0ea5e9"}},
-            {"name": "Signal", "type": "line", "data": sig, "smooth": True, "showSymbol": False, "lineStyle": {"width": 1.5, "color": "#f97316"}},
-            {
-                "name": "Histogram", "type": "bar", "data": hist,
-                "itemStyle": {
-                    "color": "#26a69a" # Will use color callback in frontend if needed, but here we set static
+        trend_series.extend([
+            get_series(macd, "line", "MACD", "#0ea5e9", 1.5),
+            get_series(macd, "signal", "Signal", "#f97316", 1.5),
+            get_series(macd, "hist", "Hist", "#26a69a", 1, type="bar")
+        ])
+    adx = indicators.get("adx", {})
+    if adx:
+        trend_series.append(get_series(adx, "adx", "ADX", "#ffeb3b", 1.5, y_axis=1))
+    
+    if trend_series:
+        chart_tabs.append({
+            "title": "Trend (MACD/ADX)",
+            "type": "chart",
+            "engine": "echarts",
+            "options": {
+                "backgroundColor": "transparent", "animation": False,
+                "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+                "xAxis": common_xAxis,
+                "yAxis": [common_yAxis, {"type": "value", "position": "left", "axisLabel": {"show": False}, "splitLine": {"show": False}}],
+                "series": [s for s in trend_series if s]
+            }
+        })
+
+    # 3. TAB: MOMENTUM (RSI + STOCH)
+    mom_series = []
+    rsi = indicators.get("rsi", {})
+    if rsi: mom_series.append(get_series(rsi, "rsi14", "RSI 14", "#e040fb", 1.5))
+    stoch = indicators.get("stoch", {})
+    if stoch:
+        mom_series.append(get_series(stoch, "k", "Stoch %K", "#22d3ee", 1, dash="dashed"))
+        mom_series.append(get_series(stoch, "d", "Stoch %D", "#94a3b8", 1, dash="dotted"))
+    
+    if mom_series:
+        chart_tabs.append({
+            "title": "Momentum (RSI/Stoch)",
+            "type": "chart",
+            "engine": "echarts",
+            "options": {
+                "backgroundColor": "transparent", "animation": False,
+                "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+                "xAxis": common_xAxis, "yAxis": common_yAxis,
+                "series": [s for s in mom_series if s],
+                "visualMap": {
+                    "show": False, "pieces": [{"gt": 70, "color": "#ef5350"}, {"lt": 30, "color": "#26a69a"}],
+                    "outOfRange": {"color": "#e040fb"}
                 }
             }
-        ]
+        })
 
-    macd_option = {
-        "backgroundColor": "transparent",
-        "animation": False,
-        "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
-        "grid": {"left": "5%", "right": "12%", "top": "15%", "bottom": "15%"},
-        "xAxis": {"type": "category", "data": dates, "axisLabel": {"color": "#666", "fontSize": 9}},
-        "yAxis": {"type": "value", "position": "right", "axisLabel": {"color": "#888", "fontSize": 9}, "splitLine": {"lineStyle": {"color": "#1e1e1e"}}},
-        "series": macd_series
-    }
-
-    return [
-        {
-            "title": "Advanced Chart",
+    # 4. TAB: VOLATILITY (ATR)
+    atr = indicators.get("atr_pct", [])
+    if atr:
+        chart_tabs.append({
+            "title": "Volatility (ATR%)",
             "type": "chart",
             "engine": "echarts",
-            "options": price_option
-        },
-        {
-            "title": "MACD",
-            "type": "chart",
-            "engine": "echarts",
-            "options": macd_option
-        }
-    ]
+            "options": {
+                "backgroundColor": "transparent", "animation": False,
+                "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+                "xAxis": common_xAxis, "yAxis": common_yAxis,
+                "series": [get_series(atr, name="ATR %", color="#ef4444", width=1.5)]
+            }
+        })
+
+    return chart_tabs
 
 
 # ---------------------------------------------------------------------------
