@@ -536,7 +536,7 @@ def analyze(symbol):
         indicators = calculate_all(df, include=include_list)
 
         # Generate signals (requires core indicators)
-        score = generate_signals(df, indicators) if (not include_list or 'adx' in include_list) else {"verdict": "DATA_LIMITED"}
+        score = generate_signals(df, indicators) if (not include_list or 'all' in include_list or 'adx' in include_list) else {"verdict": "DATA_LIMITED"}
 
         # Support & Resistance
         supports, resistances = find_support_resistance(df)

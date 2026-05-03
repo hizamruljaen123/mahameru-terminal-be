@@ -100,16 +100,46 @@ def _build_rich_response(
     # 3. Process grouped comparisons
     for title, group_data in groups.items():
         if len(group_data) > 1:
-            # Create a unified table
+            # Create a unified comparison table
             comp_table = _transform_comparison_table(title, group_data)
             if comp_table:
                 components.append(comp_table)
+            
+            # Extract detailed components (like charts) for each compared item into tabs
+            for res in group_data:
+                tool_name = res.get("tool")
+                data = res.get("data")
+                transformer = _COMPONENT_TRANSFORMERS.get(tool_name)
+                if transformer:
+                    try:
+                        ticker_comps = transformer(tool_name, data)
+                        symbol = data.get("symbol", "N/A")
+                        
+                        # Filter out cards (already in comparison table) and collect others
+                        sub_tabs = []
+                        for c in ticker_comps:
+                            if c.get("type") == "tabs":
+                                # Flatten nested tabs
+                                sub_tabs.extend(c.get("tabs", []))
+                            elif c.get("type") not in ["card", "cards"]:
+                                # Ensure it has a title
+                                if "title" not in c:
+                                    c["title"] = c.get("type", "View").title()
+                                sub_tabs.append(c)
+                        
+                        if sub_tabs:
+                            tool_tabs.append({
+                                "title": f"{symbol} Analysis",
+                                "type": "tabs",
+                                "tabs": sub_tabs
+                            })
+                    except Exception as te:
+                        logger.error(f"Error extracting comparison sub-tabs for {tool_name}: {te}")
         else:
-            # Only one result, treat as normal card
+            # Only one result, treat as normal
             remaining_results.append(group_data[0])
 
     # 4. Process remaining individual tool results
-    tool_tabs = []
     for result in remaining_results:
         tool_name = result.get("tool", "unknown")
         data = result.get("data", {})
@@ -124,11 +154,15 @@ def _build_rich_response(
             
             for i, comp in enumerate(comps):
                 # RULE: Cards go to top-level, everything else to tabs
-                if comp.get("type") == "card" or comp.get("type") == "cards":
+                if comp.get("type") in ["card", "cards"]:
                     components.append(comp)
                 elif comp.get("type") == "tabs":
-                    for subtab in comp.get("tabs", []):
-                        tool_tabs.append(subtab)
+                    # If it's a multi-tab view for one ticker, we can put it as a single tab
+                    symbol = data.get("symbol", "N/A")
+                    tool_tabs.append({
+                        "title": f"{symbol} Intelligence",
+                        **comp
+                    })
                 else:
                     title = label if i == 0 else f"{label} ({i+1})"
                     tool_tabs.append({
@@ -251,45 +285,102 @@ def _transform_technical_analysis(tool: str, data: Dict[str, Any]) -> List[Dict[
 
     # CASE A: If it's just market history, show the chart
     if tool == "get_market_history":
-        ohlcv = data.get("ohlcv", data.get("history", []))
-        if not ohlcv:
-            return [{"type": "markdown", "data": f"No history found for {symbol}"}]
-        
-        # Reuse logic for building chart (omitted here for brevity, assuming existing logic)
-        # For now, let's use a simplified version or the one above if we can refactor.
-        # But wait, I'll just keep the original logic for history.
         return _transform_history_chart(symbol, data)
-
-    # CASE B: If it's the analysis tool, return a CARD as requested
-    signals = data.get("signals", {})
-    verdict = signals.get("verdict", "NEUTRAL")
+    components = []
+    
+    # 1. Check for DATA_LIMITED status
+    signals_data = data.get("signals", {})
+    is_limited = signals_data.get("verdict") == "DATA_LIMITED"
+    
+    # 2. Top-level Summary Card (Prominent)
+    verdict = signals_data.get("verdict", "NEUTRAL")
+    score = signals_data.get("score", 0)
     current = data.get("current", {})
     
-    rsi = current.get("rsi14", current.get("rsi", "N/A"))
-    macd = current.get("macd", "N/A")
-    adx = current.get("adx", "N/A")
-    
     fields = [
-        {"label": "Signal", "value": verdict},
-        {"label": "RSI (14)", "value": str(round(rsi, 2)) if isinstance(rsi, (int, float)) else rsi},
-        {"label": "MACD", "value": str(round(macd, 4)) if isinstance(macd, (int, float)) else macd},
-        {"label": "ADX", "value": str(round(adx, 2)) if isinstance(adx, (int, float)) else adx},
+        {"label": "Verdict", "value": verdict},
+        {"label": "Score", "value": f"{score}%"},
+        {"label": "Price", "value": str(current.get("price", "N/A"))},
     ]
     
-    sr = data.get("support_resistance", {})
-    if sr:
-        supports = sr.get("supports", [])
-        if supports: fields.append({"label": "Support", "value": str(round(supports[0], 2))})
-        resistances = sr.get("resistances", [])
-        if resistances: fields.append({"label": "Resistance", "value": str(round(resistances[0], 2))})
+    if is_limited:
+        fields = [
+            {"label": "Verdict", "value": "DATA_LIMITED"},
+            {"label": "Note", "value": "Historical data is currently insufficient for full signal generation."},
+        ]
 
-    return [{
+    components.append({
         "type": "card",
-        "title": f"Technical Analysis: {symbol}",
-        "subtitle": "Core Signals & Indicators",
+        "title": f"Technical: {symbol}",
+        "subtitle": "Summary & Intelligence",
         "fields": fields,
         "color": "#22d3ee"
-    }]
+    })
+
+    # 3. Categorized Tabs
+    ta_tabs = []
+    
+    # Tab: Charts
+    if "ohlcv" in data or "history" in data:
+        ta_tabs.extend(_transform_history_chart(symbol, data)) # This returns a list of components
+    elif is_limited:
+        ta_tabs.append({
+            "title": "Charts",
+            "type": "markdown",
+            "data": f"⚠️ **Charts Unavailable**: The historical data for **{symbol}** is too limited to render reliable candlestick charts. Please try a longer period."
+        })
+
+    # Tab: Indicators (Oscillators + MAs)
+    if not is_limited:
+        rows = []
+        # Oscillators
+        rows.append(["RSI (14)", str(round(current.get("rsi14", 0), 2)) if current.get("rsi14") else "N/A"])
+        rows.append(["MACD", str(round(current.get("macd", 0), 4)) if current.get("macd") else "N/A"])
+        rows.append(["ADX (14)", str(round(current.get("adx", 0), 2)) if current.get("adx") else "N/A"])
+        
+        # MAs
+        ma_table = data.get("ma_table", {})
+        for ma_key, ma_val in ma_table.items():
+            rows.append([ma_key.upper(), f"{ma_val.get('value')} ({ma_val.get('pct'):+.2f}%)"])
+
+        ta_tabs.append({
+            "title": "Indicators",
+            "type": "table",
+            "headers": ["Indicator", "Value"],
+            "rows": rows
+        })
+
+    # Tab: Levels (S/R + Fib)
+    sr = data.get("support_resistance", {})
+    if sr:
+        sr_rows = []
+        for r in sr.get("resistances", []): sr_rows.append(["Resistance", str(r)])
+        for s in sr.get("supports", []): sr_rows.append(["Support", str(s)])
+        if sr_rows:
+            ta_tabs.append({
+                "title": "Levels",
+                "type": "table",
+                "headers": ["Type", "Price"],
+                "rows": sr_rows
+            })
+
+    if ta_tabs:
+        # Wrap into a sub-tabs component
+        # We rename 'title' in ta_tabs items to fit the TabsContainer structure if they aren't already
+        formatted_tabs = []
+        for t in ta_tabs:
+            if "title" not in t:
+                # Fallback for direct components
+                t_type = t.get("type", "Data")
+                t["title"] = t_type.title()
+            formatted_tabs.append(t)
+
+        components.append({
+            "type": "tabs",
+            "tabs": formatted_tabs
+        })
+
+    return components
 
 
 def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
