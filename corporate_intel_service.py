@@ -79,9 +79,8 @@ def _get_session() -> requests.Session:
 
 
 def _make_ticker(symbol: str) -> yf.Ticker:
-    """Create a yfinance Ticker that uses our shared session."""
-    sess = _get_session()
-    t = yf.Ticker(symbol, session=sess)
+    """Create a yfinance Ticker."""
+    t = yf.Ticker(symbol)
     return t
 
 

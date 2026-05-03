@@ -71,10 +71,18 @@ def _build_rich_response(
             "type": "markdown",
             "data": message,
         })
-
-    # 2. Collect tool results
-    tool_tabs = []
+    # 2. Group tools for potential comparison
+    from collections import defaultdict
+    groups = defaultdict(list)
+    remaining_results = []
     
+    COMPARISON_TOOLS = {
+        "get_technical_analysis": "Technical Analysis Comparison",
+        "get_entity_analysis": "Fundamental Analysis Comparison",
+        "get_corporate_intel": "Fundamental Analysis Comparison",
+        "get_market_quote": "Market Price Comparison"
+    }
+
     for result in tool_results:
         tool_name = result.get("tool", "unknown")
         if not result.get("success"):
@@ -83,7 +91,27 @@ def _build_rich_response(
                 "data": f"⚠️ **{tool_name}**: {result.get('error', 'Unknown error')}",
             })
             continue
+        
+        if tool_name in COMPARISON_TOOLS:
+            groups[COMPARISON_TOOLS[tool_name]].append(result)
+        else:
+            remaining_results.append(result)
 
+    # 3. Process grouped comparisons
+    for title, group_data in groups.items():
+        if len(group_data) > 1:
+            # Create a unified table
+            comp_table = _transform_comparison_table(title, group_data)
+            if comp_table:
+                components.append(comp_table)
+        else:
+            # Only one result, treat as normal card
+            remaining_results.append(group_data[0])
+
+    # 4. Process remaining individual tool results
+    tool_tabs = []
+    for result in remaining_results:
+        tool_name = result.get("tool", "unknown")
         data = result.get("data", {})
         transformer = _COMPONENT_TRANSFORMERS.get(tool_name, _transform_generic)
         
@@ -123,6 +151,89 @@ def _build_rich_response(
         })
 
     return components
+
+
+def _transform_comparison_table(title: str, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge multiple analysis results into a single comparison table."""
+    headers = ["Metric"]
+    rows_map = {} # label -> [val1, val2, ...]
+    
+    for res in results:
+        data = res.get("data", {})
+        tool = res.get("tool", "")
+        
+        # Get symbol
+        symbol = data.get("symbol", "N/A")
+        if tool == "get_corporate_intel" and "info" in data:
+            symbol = data["info"].get("symbol", symbol)
+        
+        headers.append(symbol)
+        
+        # Extract metrics based on tool type
+        metrics = []
+        if "technical" in title.lower():
+            current = data.get("current", {})
+            sig = data.get("signals", {}).get("verdict", "N/A")
+            metrics = [
+                ("Signal", sig),
+                ("RSI (14)", current.get("rsi14", current.get("rsi", "N/A"))),
+                ("MACD", current.get("macd", "N/A")),
+                ("ADX", current.get("adx", "N/A")),
+            ]
+        elif "fundamental" in title.lower():
+            # Handle both entity and corporate structure
+            if "info" in data and "insider_transactions" in data:
+                info = data.get("info", {})
+                price = info.get("currentPrice", "N/A")
+                mkt_cap = info.get("marketCap", "N/A")
+                pe = info.get("trailingPE", "N/A")
+                dy = info.get("dividendYield", 0)
+                if isinstance(dy, (int, float)): dy = f"{dy*100:.2f}%"
+            else:
+                info = data.get("data", data)
+                price = info.get("price", "N/A")
+                mkt_cap = info.get("market_cap", "N/A")
+                pe = info.get("trailing_pe", "N/A")
+                dy = info.get("dividend_yield", 0)
+                if isinstance(dy, (int, float)): dy = f"{dy*100:.2f}%"
+            
+            metrics = [
+                ("Price", price),
+                ("Market Cap", mkt_cap),
+                ("P/E Ratio", pe),
+                ("Div Yield", dy),
+            ]
+        elif "price" in title.lower():
+            quote = data.get("quote", data.get("data", data))
+            price = quote.get("regularMarketPrice", quote.get("price", "N/A"))
+            change = quote.get("regularMarketChangePercent", quote.get("change_pct", "N/A"))
+            metrics = [
+                ("Last Price", price),
+                ("Change (%)", f"{change:+.2f}%" if isinstance(change, (int, float)) else change),
+            ]
+
+        for label, val in metrics:
+            if label not in rows_map:
+                rows_map[label] = []
+            # Align with previous results if some metric missing (though unlikely here)
+            while len(rows_map[label]) < (len(headers) - 2):
+                rows_map[label].append("N/A")
+            
+            # Format value
+            if isinstance(val, float): val = round(val, 2)
+            rows_map[label].append(str(val))
+
+    # Convert rows_map to list
+    final_rows = []
+    for label, vals in rows_map.items():
+        final_rows.append([label] + vals)
+
+    return {
+        "type": "table",
+        "title": title,
+        "headers": headers,
+        "rows": final_rows
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -252,15 +363,30 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
 
 def _transform_entity_analysis(tool: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Transform fundamental data into a summary CARD."""
-    info = data.get("data", data)
-    symbol = info.get("symbol", "N/A")
-    name = info.get("name", "N/A")
-    
-    price = info.get("price")
-    change_pct = info.get("change_pct")
-    mkt_cap = info.get("market_cap")
-    pe = info.get("trailing_pe")
-    dy = info.get("dividend_yield")
+    # Handle differences between get_entity_analysis and get_corporate_intel structures
+    if "info" in data and "insider_transactions" in data:
+        # Structure from get_corporate_intel
+        info = data.get("info", {})
+        symbol = info.get("symbol", "N/A")
+        name = info.get("shortName", info.get("longName", "N/A"))
+        price = info.get("currentPrice", info.get("previousClose"))
+        # yfinance info doesn't always have change_pct directly
+        change_pct = 0.0
+        if "currentPrice" in info and "previousClose" in info and info["previousClose"]:
+            change_pct = ((info["currentPrice"] - info["previousClose"]) / info["previousClose"]) * 100
+        mkt_cap = info.get("marketCap")
+        pe = info.get("trailingPE")
+        dy = info.get("dividendYield", 0)
+    else:
+        # Structure from get_entity_analysis
+        info = data.get("data", data)
+        symbol = info.get("symbol", "N/A")
+        name = info.get("name", "N/A")
+        price = info.get("price")
+        change_pct = info.get("change_pct", 0.0)
+        mkt_cap = info.get("market_cap")
+        pe = info.get("trailing_pe")
+        dy = info.get("dividend_yield")
     
     # Format large numbers
     def format_mkt_cap(val):
