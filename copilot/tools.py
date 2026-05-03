@@ -337,7 +337,7 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
                 "type": "object",
                 "properties": {
                     "sector": {"type": "string", "enum": ["energy", "metals", "agriculture", "all"], "default": "all"},
-                    "commodity": {"type": "string", "description": "Specific commodity e.g. crude_oil, gold, copper"}
+                    "commodity": {"type": "string", "description": "Specific commodity e.g. crude_oil, gold, copper", "default": ""}
                 }
             }
         }

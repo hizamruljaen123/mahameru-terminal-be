@@ -324,6 +324,13 @@ def get_policy_divergence():
     finally:
         conn.close()
 
+@app.get("/api/sentiment/search")
+def search_sentiment(q: str, days: int = 7):
+    """Alias endpoint — gateway calls /api/sentiment/search?q=...&days=...
+    Delegates to the research_sentiment logic using 'q' as keyword."""
+    return research_sentiment(keyword=q)
+
+
 @app.get("/api/sentiment/research")
 def research_sentiment(keyword: str):
     try:

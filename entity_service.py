@@ -215,6 +215,57 @@ def search_entity():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/api/entity/summary')
+def get_entity_summary():
+    """Lightweight entity summary endpoint — returns key metrics for a symbol."""
+    symbol = request.args.get('symbol', '')
+    analysis_type = request.args.get('analysis_type', 'full')
+    if not symbol:
+        return jsonify({"error": "symbol parameter is required"}), 400
+    try:
+        normalized_symbol = normalize_symbol(symbol)
+        ticker = yf.Ticker(normalized_symbol)
+        info = ticker.info or {}
+
+        name = info.get('longName') or info.get('shortName', symbol)
+        sector = info.get('sector')
+        industry = info.get('industry')
+        price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
+        prev_close = info.get('previousClose') or price
+        change = (price - prev_close) if price and prev_close else None
+        change_pct = (change / prev_close * 100) if change is not None and prev_close else None
+
+        summary = {
+            "symbol": symbol,
+            "name": name,
+            "sector": sector,
+            "industry": industry,
+            "price": float(price) if price else None,
+            "change": float(change) if change else None,
+            "change_pct": round(float(change_pct), 2) if change_pct else None,
+            "market_cap": info.get('marketCap'),
+            "trailing_pe": info.get('trailingPE'),
+            "forward_pe": info.get('forwardPE'),
+            "dividend_yield": info.get('dividendYield'),
+            "beta": info.get('beta'),
+            "fifty_two_week_high": info.get('fiftyTwoWeekHigh'),
+            "fifty_two_week_low": info.get('fiftyTwoWeekLow'),
+            "volume": info.get('volume'),
+            "avg_volume": info.get('averageVolume'),
+            "market_state": info.get('marketState', 'REGULAR'),
+            "currency": info.get('currency'),
+            "exchange": info.get('exchange'),
+            "long_business_summary": info.get('longBusinessSummary'),
+            "website": info.get('website'),
+            "country": info.get('country'),
+            "city": info.get('city'),
+            "full_time_employees": info.get('fullTimeEmployees'),
+            "analysis_type": analysis_type,
+        }
+        return jsonify(clean_data({"status": "success", "data": summary}))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/entity/profile/<symbol>')
 def get_entity_profile(symbol):
     normalized_symbol = normalize_symbol(symbol)

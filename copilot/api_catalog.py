@@ -186,6 +186,7 @@ API_CATALOG: Dict[str, Dict[str, Any]] = {
             "sentiment_all":    {"path": "/api/sentiment/summary-all",       "method": "GET", "desc": "All sentiment summaries"},
             "policy_divergence":{"path": "/api/sentiment/policy-divergence", "method": "GET", "desc": "Hawkish vs Dovish analysis"},
             "research_sentiment":{"path": "/api/sentiment/research",        "method": "GET", "params": {"keyword": "str"}, "desc": "Research sentiment"},
+            "sentiment_search": {"path": "/api/sentiment/search",           "method": "GET", "params": {"q": "str", "days": "int"}, "desc": "Search sentiment (gateway alias)"},
         }
     },
     "vessel": {
@@ -356,7 +357,7 @@ API_CATALOG: Dict[str, Dict[str, Any]] = {
         "base": f"{API_BASE}/entity",
         "description": "Quantitative entity engine: annual reports, fundamental analysis, scoring",
         "endpoints": {
-            "entity_summary":   {"path": "/api/entity/summary/{symbol}",    "method": "GET", "desc": "Entity summary"},
+            "entity_summary":   {"path": "/api/entity/summary",             "method": "GET", "params": {"symbol": "str", "analysis_type": "full|fundamental|valuation"}, "desc": "Entity summary"},
             "entity_report":    {"path": "/api/entity/report/{symbol}",     "method": "GET", "desc": "Full entity report"},
             "entity_score":     {"path": "/api/entity/score/{symbol}",      "method": "GET", "desc": "Entity quant score"},
         }
@@ -436,7 +437,7 @@ MICROSERVICE_ROUTE_TEMPLATES: Dict[str, str] = {
     "run_deep_research":         "{base}/research/api/research/start?symbols={symbols}&analysis_type={analysis_type}",
     "get_sentiment_analysis":    "{base}/sentiment/api/sentiment/search?q={query}&days={days}",
     "get_market_regime":         "{base}/regime/api/regime/current?asset_class={asset_class}",
-    "get_corporate_intel":       "{base}/corporate/api/corporate/summary?symbol={symbol}&data_type={data_type}",
+    "get_corporate_intel":       "{base}/corporate/api/corporate/summary/{symbol}?data_type={data_type}",
     "get_entity_analysis":       "{base}/entity/api/entity/summary?symbol={symbol}&analysis_type={analysis_type}",
     "get_macro_economics":       "{base}/macro/api/macro/indicators?indicator={indicator}&country={country}",
     "get_capital_flow":          "{base}/capital-flow/api/capital-flow/summary?flow_type={flow_type}",

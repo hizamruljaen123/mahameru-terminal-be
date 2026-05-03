@@ -158,6 +158,13 @@ async def fetch_commodity_highlights_loop():
             log.error(f"COMMODITY_BG loop error: {e}")
         await asyncio.sleep(60)
 
+@app.get("/api/commodity/prices")
+def get_commodity_prices(sector: str = "all", commodity: str = ""):
+    """Alias endpoint — gateway calls /api/commodity/prices?sector=...&commodity=...
+    Delegates to the commodity highlights logic."""
+    return get_commodities_highlights()
+
+
 @app.get("/api/commodities/highlights")
 def get_commodities_highlights():
     """Return cached commodity prices. Background loop keeps fresh every 60s."""
