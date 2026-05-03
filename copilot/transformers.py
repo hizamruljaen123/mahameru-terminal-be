@@ -403,7 +403,7 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
             "volume": [row.get("volume", row.get("Volume")) for row in history],
         }
 
-    dates = ohlcv_obj.get("date", [])
+    dates = data.get("dates", ohlcv_obj.get("date", []))
     close = ohlcv_obj.get("close", [])
     open_p = ohlcv_obj.get("open", [])
     low = ohlcv_obj.get("low", [])
@@ -435,8 +435,10 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
             "yAxisIndex": y_axis, "z": 3
         }
 
-    common_xAxis = {"type": "category", "data": dates, "axisLabel": {"color": "#666", "fontSize": 9}, "splitLine": {"show": False}}
-    common_yAxis = {"type": "value", "position": "right", "axisLabel": {"color": "#888", "fontSize": 9}, "splitLine": {"lineStyle": {"color": "#1e1e1e"}}, "scale": True}
+    # Common styling components
+    common_xAxis = {"type": "category", "data": dates, "axisLabel": {"color": "#999", "fontSize": 10, "fontFamily": "monospace"}, "axisLine": {"lineStyle": {"color": "#333"}}, "splitLine": {"show": False}}
+    common_yAxis = {"type": "value", "position": "right", "axisLabel": {"color": "#aaa", "fontSize": 10, "fontFamily": "monospace"}, "axisLine": {"show": False}, "splitLine": {"lineStyle": {"color": "#1e1e1e"}}, "scale": True}
+    common_legend = {"inactiveColor": "#444", "textStyle": {"color": "#888", "fontSize": 10}, "top": 5, "left": 10}
 
     chart_tabs = []
 
@@ -462,9 +464,10 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
         "engine": "echarts",
         "options": {
             "backgroundColor": "transparent", "animation": False,
+            "legend": common_legend,
             "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
-            "grid": [{"left": "5%", "right": "12%", "top": "10%", "height": "65%"}, {"left": "5%", "right": "12%", "top": "78%", "height": "12%"}],
-            "xAxis": [{"type": "category", "data": dates, "gridIndex": 0, "axisLabel": {"show": False}}, {"type": "category", "data": dates, "gridIndex": 1, "axisLabel": {"color": "#666", "fontSize": 9}}],
+            "grid": [{"left": "3%", "right": "10%", "top": "15%", "height": "60%"}, {"left": "3%", "right": "10%", "top": "78%", "height": "12%"}],
+            "xAxis": [{"type": "category", "data": dates, "gridIndex": 0, "axisLabel": {"show": False}, "axisLine": {"lineStyle": {"color": "#333"}}}, {"type": "category", "data": dates, "gridIndex": 1, "axisLabel": {"color": "#666", "fontSize": 9}, "axisLine": {"lineStyle": {"color": "#333"}}}],
             "yAxis": [common_yAxis, {"type": "value", "gridIndex": 1, "show": False}],
             "series": price_series,
             "dataZoom": [{"type": "inside", "xAxisIndex": [0, 1], "start": 30, "end": 100}]
@@ -491,7 +494,9 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
             "engine": "echarts",
             "options": {
                 "backgroundColor": "transparent", "animation": False,
+                "legend": common_legend,
                 "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+                "grid": {"left": "3%", "right": "10%", "top": "20%", "bottom": "15%"},
                 "xAxis": common_xAxis,
                 "yAxis": [common_yAxis, {"type": "value", "position": "left", "axisLabel": {"show": False}, "splitLine": {"show": False}}],
                 "series": [s for s in trend_series if s]
@@ -514,7 +519,9 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
             "engine": "echarts",
             "options": {
                 "backgroundColor": "transparent", "animation": False,
+                "legend": common_legend,
                 "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+                "grid": {"left": "3%", "right": "10%", "top": "20%", "bottom": "15%"},
                 "xAxis": common_xAxis, "yAxis": common_yAxis,
                 "series": [s for s in mom_series if s],
                 "visualMap": {
@@ -533,7 +540,9 @@ def _transform_history_chart(symbol: str, data: Dict[str, Any]) -> List[Dict[str
             "engine": "echarts",
             "options": {
                 "backgroundColor": "transparent", "animation": False,
+                "legend": common_legend,
                 "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+                "grid": {"left": "3%", "right": "10%", "top": "20%", "bottom": "15%"},
                 "xAxis": common_xAxis, "yAxis": common_yAxis,
                 "series": [get_series(atr, name="ATR %", color="#ef4444", width=1.5)]
             }
