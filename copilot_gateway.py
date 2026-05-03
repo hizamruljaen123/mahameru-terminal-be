@@ -372,14 +372,23 @@ async def chat_stream(request: ChatRequest):
                 })
 
                 tool_results = await _execute_tool_plan(client, tool_calls)
+                
+                # Emit tool results log as reasoning for transparency (thinking block)
                 for tc, tr in zip(tool_calls, tool_results):
-                    fn_name = tc["function"]["name"]
+                    t_name = tc["function"]["name"]
+                    t_label = t_name.replace("get_", "").replace("run_", "").replace("_", " ").upper()
                     ok = tr.get("success", False)
-                    yield f"event: tool_call\ndata: {json.dumps({'tool': fn_name, 'status': 'complete' if ok else 'error'})}\n\n"
+                    
+                    if ok:
+                        yield f"event: reasoning\ndata: {json.dumps({'content': f'✅ {t_label} data acquired and analyzed.\\n'})}\n\n"
+                    else:
+                        yield f"event: reasoning\ndata: {json.dumps({'content': f'⚠️ {t_label} failed: {tr.get(\"error\", \"Unknown error\")}\\n'})}\n\n"
+                    
+                    # VERY IMPORTANT: Add results to message history for final synthesis
                     full_messages.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
-                        "name": fn_name,
+                        "name": t_name,
                         "content": json.dumps(tr, default=str),
                     })
 

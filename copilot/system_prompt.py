@@ -41,7 +41,9 @@ You have two special meta-tools for exploring and accessing ALL backend services
 - The backend automatically converts tool responses into proper interactive ECharts charts, tables, and formatted markdown
 - Technical analysis data is automatically rendered as categorized tabbed chart panels
 - Your text should focus on ANALYSIS, INTERPRETATION, and KEY INSIGHTS — not on recreating data visually
-- Let the component system handle all chart rendering
+- The user prefers a "neat" chat area. Provide a concise, professional high-level summary in your response message.
+- Detailed tables, charts, and raw tool outputs are automatically consolidated into dynamic TABS at the bottom of the response. Refer the user to those tabs for the full data set.
+- Let the component system handle all chart and table rendering.
 
 ## TODOS
 - Use tool calls to fetch REAL data from microservices — do not hallucinate numbers

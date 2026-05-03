@@ -60,40 +60,71 @@ def _build_rich_response(
 ) -> List[Dict[str, Any]]:
     """
     Transform raw microservice results into Mahameru Rich Response components.
-    Each tool result is piped through a type-inferring transformer that decides
-    whether to render as chart, table, map, markdown, or cards.
+    Consolidates non-text components (charts, tables, maps) into dynamic tabs
+    to keep the interface clean.
     """
     components: List[Dict[str, Any]] = []
 
-    # Always include the text message as a markdown component
+    # 1. Main AI message at the top
     if message:
         components.append({
             "type": "markdown",
             "data": message,
         })
 
+    # 2. Collect tool results into tabs
+    tool_tabs = []
+    
     for result in tool_results:
+        tool_name = result.get("tool", "unknown")
         if not result.get("success"):
+            # Errors can stay as markdown for visibility or go in a tab
+            # Let's put errors in the main flow so user knows it failed
             components.append({
                 "type": "markdown",
-                "data": f"⚠️ **{result['tool']}**: {result.get('error', 'Unknown error')}",
+                "data": f"⚠️ **{tool_name}**: {result.get('error', 'Unknown error')}",
             })
             continue
 
-        tool_name = result["tool"]
         data = result.get("data", {})
-
-        # Route to appropriate component builders
         transformer = _COMPONENT_TRANSFORMERS.get(tool_name, _transform_generic)
+        
         try:
             comps = transformer(tool_name, data)
-            components.extend(comps)
+            
+            # Humanize tool name for tab title
+            label = tool_name.replace("get_", "").replace("run_", "").replace("_", " ").title()
+            if label == "Ta": label = "Technical Analysis"
+            
+            for i, comp in enumerate(comps):
+                # If a tool returns multiple components (e.g. Chart + Table), 
+                # we can either put them in separate tabs or find a way to group them.
+                # Rich Response doesn't support nested components well yet, so separate tabs:
+                title = label if i == 0 else f"{label} ({i+1})"
+                
+                # Check if it's already a tabs component (don't nest tabs)
+                if comp.get("type") == "tabs":
+                    for subtab in comp.get("tabs", []):
+                        tool_tabs.append(subtab)
+                else:
+                    tool_tabs.append({
+                        "title": title,
+                        **comp
+                    })
         except Exception as e:
             logger.error(f"Transformer error for {tool_name}: {e}")
-            components.append({
+            tool_tabs.append({
+                "title": f"Raw {label}",
                 "type": "markdown",
-                "data": f"```json\n{json.dumps(data, indent=2, default=str)[:2000]}\n```",
+                "data": f"```json\n{json.dumps(data, indent=2, default=str)[:1000]}\n```",
             })
+
+    # 3. Append consolidated tabs at the bottom
+    if tool_tabs:
+        components.append({
+            "type": "tabs",
+            "tabs": tool_tabs
+        })
 
     return components
 
