@@ -87,6 +87,9 @@ server {
     location /sky/ { proxy_pass http://127.0.0.1:5002/; }
 
     location /geo/ { proxy_pass http://127.0.0.1:8091/; }
+    location /submarine/ { proxy_pass http://127.0.0.1:8120/; }
+    location /satellite/ { proxy_pass http://127.0.0.1:8130/; }
+    location /research/ { proxy_pass http://127.0.0.1:5202/; }
 
     location /ais/ {
         # Alamat backend ais_service.py (sesuaikan port jika berbeda)
@@ -126,4 +129,26 @@ server {
     location /dashboard/ { proxy_pass http://127.0.0.1:8000/; }
     location /archive/ { proxy_pass http://127.0.0.1:5001/; }
     location /analyzer/ { proxy_pass http://127.0.0.1:5000/; }
+
+    # --- NEW TIER 1 SERVICES (OSINT Expansion) ---
+    location /bonds/ { proxy_pass http://127.0.0.1:8145/; }
+    location /volatility/ { proxy_pass http://127.0.0.1:8155/; }
+    location /options/ { proxy_pass http://127.0.0.1:8165/; }
+
+    # --- NEW TIER 2 SERVICES ---
+    location /capital-flows/ { proxy_pass http://127.0.0.1:8175/; }
+    location /corporate/ { proxy_pass http://127.0.0.1:8185/; }
+
+    # --- NEW TIER 3 SERVICES ---
+    location /regime/ { proxy_pass http://127.0.0.1:8195/; }
+    location /esg/ { proxy_pass http://127.0.0.1:8190/; }
+    location /macro/ { proxy_pass http://127.0.0.1:8205/; }
+    location /supply-chain/ { proxy_pass http://127.0.0.1:8210/; }
+
+    # --- CRYPTO STREAM SERVICE REST API ---
+    location /stream/ { proxy_pass http://127.0.0.1:8092/; }
+
+    # --- COPILOT AI GATEWAY (Port 8500) ---
+    # Trailing slash strips /copilot/ prefix, forwards /api/copilot/* to backend
+    location /copilot/ { proxy_pass http://127.0.0.1:8500/; }
 }

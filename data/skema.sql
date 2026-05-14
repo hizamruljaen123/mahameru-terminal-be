@@ -88,7 +88,11 @@ CREATE TABLE IF NOT EXISTS `article` (
   KEY `pubDate` (`pubDate`),
   KEY `sourceName` (`sourceName`),
   KEY `sentiment` (`sentiment`),
-  KEY `sourceId` (`sourceId`)
+  KEY `sourceId` (`sourceId`),
+  -- Performance fix: category filter + pubDate order (100x faster for category queries)
+  KEY `idx_category_pubdate` (`category`, `pubDate` DESC),
+  -- Performance fix: FULLTEXT for title/description search (replaces inefficient LIKE)
+  FULLTEXT KEY `idx_ft_title_desc` (`title`, `description`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Pengeluaran data tidak dipilih.
@@ -104,7 +108,10 @@ CREATE TABLE IF NOT EXISTS `countries` (
   `lat` decimal(10,6) DEFAULT NULL,
   `lon` decimal(10,6) DEFAULT NULL,
   `airport_count` int DEFAULT '0',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  -- Performance fix: indexes for geocoding lookups
+  KEY `idx_name` (`name`(100)),
+  KEY `idx_continent` (`continent`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Pengeluaran data tidak dipilih.
@@ -252,7 +259,9 @@ CREATE TABLE IF NOT EXISTS `feedsource` (
   `active` tinyint(1) DEFAULT '1',
   `priority` int DEFAULT '0',
   PRIMARY KEY (`id_number`) USING BTREE,
-  UNIQUE KEY `url` (`url`)
+  UNIQUE KEY `url` (`url`),
+  -- Performance fix: index on id (TEXT column, prefix 100) for JOINs with article.sourceId
+  KEY `idx_id` (`id`(100))
 ) ENGINE=InnoDB AUTO_INCREMENT=992 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Pengeluaran data tidak dipilih.
@@ -621,7 +630,11 @@ CREATE TABLE IF NOT EXISTS `oil_trades` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_trade` (`period`,`origin_id`,`destination_id`,`grade_id`,`frequency`),
   KEY `period` (`period`),
-  KEY `origin_id` (`origin_id`)
+  KEY `origin_id` (`origin_id`),
+  -- Performance fix: index destination_id for filtering
+  KEY `idx_destination_id` (`destination_id`),
+  -- Performance fix: composite covering index for common origin+dest queries
+  KEY `idx_origin_dest_period` (`origin_id`, `destination_id`, `period` DESC)
 ) ENGINE=InnoDB AUTO_INCREMENT=218007 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Pengeluaran data tidak dipilih.
@@ -656,7 +669,9 @@ CREATE TABLE IF NOT EXISTS `power_plants` (
   `commissioning_year` float DEFAULT NULL,
   `owner` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  -- Performance fix: index for country lookups
+  KEY `idx_country_long` (`country_long`(100))
 ) ENGINE=InnoDB AUTO_INCREMENT=34937 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Pengeluaran data tidak dipilih.

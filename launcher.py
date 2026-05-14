@@ -36,74 +36,74 @@ def get_p(filename):
 # Unified Service List
 # TIER 0: Core News Ingestion — 5 parallel nodes (each handles a category tier)
 TIER0 = [
-    [PYTHON_EXE, get_p("news_service.py"), "--port", "5101", "--categories", NODE1_CATS],  # Core National
-    [PYTHON_EXE, get_p("news_service.py"), "--port", "5102", "--categories", NODE2_CATS],  # Intel & Risk
-    [PYTHON_EXE, get_p("news_service.py"), "--port", "5103", "--categories", NODE3_CATS],  # Legal & Military
-    [PYTHON_EXE, get_p("news_service.py"), "--port", "5104", "--categories", NODE4_CATS],  # Industrial & Tech
-    [PYTHON_EXE, get_p("news_service.py"), "--port", "5105", "--categories", NODE5_CATS],  # ESG & Social
-    [PYTHON_EXE, get_p("backup_service.py")],                                              # Port 5004
+    [PYTHON_EXE, get_p(os.path.join("services", "news", "news_service.py")), "--port", "5101", "--categories", NODE1_CATS],  # Core National
+    [PYTHON_EXE, get_p(os.path.join("services", "news", "news_service.py")), "--port", "5102", "--categories", NODE2_CATS],  # Intel & Risk
+    [PYTHON_EXE, get_p(os.path.join("services", "news", "news_service.py")), "--port", "5103", "--categories", NODE3_CATS],  # Legal & Military
+    [PYTHON_EXE, get_p(os.path.join("services", "news", "news_service.py")), "--port", "5104", "--categories", NODE4_CATS],  # Industrial & Tech
+    [PYTHON_EXE, get_p(os.path.join("services", "news", "news_service.py")), "--port", "5105", "--categories", NODE5_CATS],  # ESG & Social
+    [PYTHON_EXE, get_p(os.path.join("services", "system", "backup_service.py"))],                                              # Port 5004
 ]
 
 # TIER 1: Intelligence & AI Engines
 TIER1 = [
-    [PYTHON_EXE, get_p("sentiment_service.py")],      # Port 5008
-    [PYTHON_EXE, get_p("entity_service.py")],         # Port 5005
-    [PYTHON_EXE, get_p("entity_correlation_service.py")], # Port 8200
-    [PYTHON_EXE, get_p("ta_service.py")],             # Port 5007
-    [PYTHON_EXE, get_p("deep_ta_service.py")],        # Port 5200
-    [PYTHON_EXE, get_p("research_service.py"), "--port", "5202"], # Port 5202
-    [PYTHON_EXE, get_p("price_intelligence_service.py")], # Port 8170
-    [PYTHON_EXE, get_p("copilot_gateway.py")],        # Port 8500 — LLM Agentic Gateway
+    [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "sentiment_service.py"))],      # Port 5008
+    [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "entity_service.py")), "--port", "5009"],         # Port 5009
+    [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "entity_correlation_service.py"))], # Port 8200
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "ta_service.py"))],             # Port 5007
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "deep_ta_service.py"))],        # Port 5200
+    [PYTHON_EXE, get_p(os.path.join("services", "core", "research_service.py")), "--port", "5202"], # Port 5202
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "price_intelligence_service.py"))], # Port 8170
+    [PYTHON_EXE, get_p(os.path.join("services", "core", "copilot_gateway.py"))],        # Port 8500 — LLM Agentic Gateway
 ]
 
 # TIER 2: Geo-Sensing & Special Data
 TIER2 = [
-    [PYTHON_EXE, get_p("sky_service.py")],            # Port 5002
-    [PYTHON_EXE, get_p("ais_service.py")],            # Port 8080
-    [PYTHON_EXE, get_p("geo_data_service.py")],       # Port 8091
-    [PYTHON_EXE, get_p("submarine_cable_service.py")],# Port 8120
-    [PYTHON_EXE, get_p("satellite_visual_service.py")],# Port 8130
-    [PYTHON_EXE, get_p("crypto_service.py")],         # Port 8085
-    [PYTHON_EXE, get_p("forex_service.py")],          # Port 8086
-    [PYTHON_EXE, get_p("commodity_service.py")],      # Port 8087
-    [PYTHON_EXE, get_p("market_service.py")],         # Port 8088
-    [PYTHON_EXE, get_p("oil_refinery_service.py")],   # Port 8089
-    [PYTHON_EXE, get_p("disaster_service.py")],       # Port 8095
-    [PYTHON_EXE, get_p("tv_service.py")],             # Port 5003
-    [PYTHON_EXE, get_p("infrastructure_service.py")], # Port 8097
-    [PYTHON_EXE, get_p("port_service.py")],           # Port 8098
-    [PYTHON_EXE, get_p("industrial_zone_service.py")],# Port 8094
-    [PYTHON_EXE, get_p("datacenter_service.py")],     # Port 8110
-    [PYTHON_EXE, get_p("rail_station_service.py")],    # Port 8111
-    [PYTHON_EXE, get_p("conflict_service.py")],        # Port 8140
-    [PYTHON_EXE, get_p("government_facility_service.py")],# Port 8150
-    [PYTHON_EXE, get_p("military_service.py")],        # Port 8160
-    [PYTHON_EXE, get_p("crypto_stream_service.py")],   # Port 8092
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "sky_service.py"))],            # Port 5002
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "ais_service.py"))],            # Port 8080
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "geo_data_service.py"))],       # Port 8091
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "submarine_cable_service.py"))],# Port 8120
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "satellite_visual_service.py"))],# Port 8130
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "crypto_service.py"))],         # Port 8085
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "forex_service.py"))],          # Port 8086
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "commodity_service.py"))],      # Port 8087
+    [PYTHON_EXE, get_p(os.path.join("services", "core", "market_service.py"))],         # Port 8088
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "oil_refinery_service.py"))],   # Port 8089
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "disaster_service.py"))],       # Port 8095
+    [PYTHON_EXE, get_p(os.path.join("services", "news", "tv_service.py"))],             # Port 5003
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "infrastructure_service.py"))], # Port 8097
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "port_service.py"))],           # Port 8098
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "industrial_zone_service.py"))],# Port 8094
+    [PYTHON_EXE, get_p(os.path.join("services", "system", "datacenter_service.py"))],     # Port 8110
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "rail_station_service.py"))],    # Port 8111
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "conflict_service.py"))],        # Port 8140
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "government_facility_service.py"))],# Port 8150
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "military_service.py"))],        # Port 8160
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "crypto_stream_service.py"))],   # Port 8092
     # NEW TIER 2 SERVICES (OSINT Expansion)
-    [PYTHON_EXE, get_p("bond_service.py")],             # Port 8145
-    [PYTHON_EXE, get_p("volatility_service.py")],       # Port 8155
-    [PYTHON_EXE, get_p("options_service.py")],          # Port 8165
-    [PYTHON_EXE, get_p("capital_flow_service.py")],     # Port 8175
-    [PYTHON_EXE, get_p("corporate_intel_service.py")],  # Port 8185
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "bond_service.py"))],             # Port 8145
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "volatility_service.py"))],       # Port 8155
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "options_service.py"))],          # Port 8165
+    [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "capital_flow_service.py"))],     # Port 8175
+    [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "corporate_intel_service.py"))],  # Port 8185
 ]
 
 # TIER 3: Strategic Assets & Ops
 TIER3 = [
-    [PYTHON_EXE, get_p("mines_service.py")],          # Port 8082
-    [PYTHON_EXE, get_p(os.path.join("data", "power_plant_service.py"))], # Port 8093
-    [PYTHON_EXE, get_p("oil_trade_service.py")],      # Port 8090
-    [PYTHON_EXE, get_p("gnews_service.py")],          # Port 5006
-    [PYTHON_EXE, get_p("vessel_intelligence_service.py")], # Port 8100 — Phase 4/5 Signal Engine
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "mines_service.py"))],          # Port 8082
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "power_plant_service.py"))], # Port 8093
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "oil_trade_service.py"))],      # Port 8090
+    [PYTHON_EXE, get_p(os.path.join("services", "news", "gnews_service.py"))],          # Port 5006
+    [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "vessel_intelligence_service.py"))], # Port 8100 — Phase 4/5 Signal Engine
     # NEW TIER 3 SERVICES (OSINT Expansion)
-    [PYTHON_EXE, get_p("regime_service.py")],          # Port 8195
-    [PYTHON_EXE, get_p("esg_service.py")],             # Port 8190
-    [PYTHON_EXE, get_p("macro_economics_service.py")], # Port 8205
-    [PYTHON_EXE, get_p("supply_chain_service.py")],    # Port 8210
+    [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "regime_service.py"))],          # Port 8195
+    [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "esg_service.py"))],             # Port 8190
+    [PYTHON_EXE, get_p(os.path.join("services", "market", "macro_economics_service.py"))], # Port 8205
+    [PYTHON_EXE, get_p(os.path.join("services", "system", "supply_chain_service.py"))],    # Port 8210
 ]
 
 # TIER 4: DASHBOARD AGGREGATOR (Final Layer)
 TIER4 = [
-    [PYTHON_EXE, get_p("dashboard_service.py")],     # Port 8000
+    [PYTHON_EXE, get_p(os.path.join("services", "core", "dashboard_service.py"))],     # Port 8000
 ]
 
 # TIER 5: EXTERNAL CONNECTORS (None)
@@ -113,7 +113,7 @@ SERVICE_PORTS = {
     "news_service.py": [5101, 5102, 5103, 5104, 5105],
     "backup_service.py": [5004],
     "sentiment_service.py": [5008],
-    "entity_service.py": [5005],
+    "entity_service.py": [5009],
     "ta_service.py": [5007],
     "deep_ta_service.py": [5200],
     "research_service.py": [5202],
@@ -205,22 +205,33 @@ def clean_port(port):
         print(f"[SYSTEM] ERROR CLEANING PORT {port}: {e}")
 
 PROCESS_REGISTRY = [] # List of { 'file': str, 'cmd': list, 'proc': Popen, 'mtime': float }
+ERROR_LOG_LOCK = threading.Lock()
 
 def log_relay(name, pipe):
     LOGS_DIR = os.path.join(BASE_DIR, 'logs')
-    if not os.path.exists(LOGS_DIR):
-        os.makedirs(LOGS_DIR, exist_ok=True)
+    os.makedirs(LOGS_DIR, exist_ok=True)
     
     log_file = os.path.join(LOGS_DIR, name.replace('.py', '.log'))
     try:
-        # Append mode to keep history, or 'w' to reset on each launch
+        # Append mode to keep history
         with open(log_file, 'a', encoding='utf-8') as f:
             for line in iter(pipe.readline, b''):
                 msg = line.decode('utf-8', errors='ignore').strip()
                 if msg:
-                    print(f"[{name.upper():16}] {msg}")
-                    f.write(f"{msg}\n")
+                    tstamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                    log_entry = f"[{tstamp}] [{name.upper():16}] {msg}"
+                    print(log_entry)
+                    f.write(f"{log_entry}\n")
                     f.flush()
+                    
+                    # Comprehensive Error Tracking — Filter for errors
+                    lower_msg = msg.lower()
+                    if any(err in lower_msg for err in ["error", "exception", "critical", "failed", "traceback"]):
+                        date_str = time.strftime("%Y-%m-%d")
+                        error_file = os.path.join(LOGS_DIR, f"error_{date_str}.log")
+                        with ERROR_LOG_LOCK:
+                            with open(error_file, 'a', encoding='utf-8') as ef:
+                                ef.write(f"{log_entry}\n")
     except Exception as e:
         print(f"LOG ERROR for {name}: {e}")
 
@@ -244,7 +255,16 @@ def launch_cmd(cmd):
         for p_num in target_ports:
             clean_port(p_num)
 
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # Inject PYTHONPATH to allow imports from root, services/core, and services/system
+        env = os.environ.copy()
+        core_path = os.path.join(BASE_DIR, "services", "core")
+        system_path = os.path.join(BASE_DIR, "services", "system")
+        env["PYTHONPATH"] = (BASE_DIR + os.pathsep + 
+                           core_path + os.pathsep + 
+                           system_path + os.pathsep + 
+                           env.get("PYTHONPATH", ""))
+
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
         
         reg_entry = {
             'file': file_path,
@@ -272,19 +292,19 @@ def main():
     if DEV_MODE:
         print("[SYSTEM] !!! RUNNING IN DEVELOPMENT MODE !!!")
         services_to_start = [
-            [PYTHON_EXE, get_p("gnews_service.py")],
-            [PYTHON_EXE, get_p("infrastructure_service.py")],
-            [PYTHON_EXE, get_p("port_service.py")],
-            [PYTHON_EXE, get_p(os.path.join("data", "power_plant_service.py"))],
-            [PYTHON_EXE, get_p("industrial_zone_service.py")],
-            [PYTHON_EXE, get_p("geo_data_service.py")],
-            [PYTHON_EXE, get_p("crypto_stream_service.py")],
-            [PYTHON_EXE, get_p("backup_service.py")],
-            [PYTHON_EXE, get_p("entity_correlation_service.py")],
-            [PYTHON_EXE, get_p("price_intelligence_service.py")],
-            [PYTHON_EXE, get_p("ta_service.py")],
-            [PYTHON_EXE, get_p("research_service.py"), "--port", "5202"],
-            [PYTHON_EXE, get_p("copilot_gateway.py")],  # Port 8500 — LLM Agentic Gateway
+            [PYTHON_EXE, get_p(os.path.join("services", "news", "gnews_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "infrastructure_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "port_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "power_plant_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "industrial_zone_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "geospatial", "geo_data_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "market", "crypto_stream_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "system", "backup_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "intelligence", "entity_correlation_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "market", "price_intelligence_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "market", "ta_service.py"))],
+            [PYTHON_EXE, get_p(os.path.join("services", "core", "research_service.py")), "--port", "5202"],
+            [PYTHON_EXE, get_p(os.path.join("services", "core", "copilot_gateway.py"))],  # Port 8500 — LLM Agentic Gateway
         ]
     else:
         WAVES = [TIER0, TIER1, TIER2, TIER3, TIER4, TIER5]
