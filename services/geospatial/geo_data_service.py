@@ -476,55 +476,40 @@ async def geo_trending(category: str = Query(None), limit: int = 1000, today: bo
 @app.get("/api/db-recap")
 async def geo_db_recap(days: int = Query(7)):
     """
-    Recaps news_cache.db to find trending countries and their top categories.
+    Recaps MySQL 'article' table to find trending countries and their top categories.
     """
-    import sqlite3
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "news_cache.db")
-    if not os.path.exists(db_path):
-        return {"status": "error", "message": "Database not found"}
-
+    from db_utils import execute_query
+    from utils.country_detector import detect_countries
+    
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Calculate timestamp threshold
-        threshold = time.time() - (days * 86400)
-        
-        cursor.execute("SELECT category, data FROM hot_news WHERE timestamp > ?", (threshold,))
-        rows = cursor.fetchall()
-        
-        from utils.country_detector import detect_countries
+        # Fetch articles from the last N days
+        query = "SELECT category, title, description FROM article WHERE pubDate >= DATE_SUB(NOW(), INTERVAL %s DAY)"
+        rows = execute_query(query, (days,))
         
         country_stats = {} # {code: {count: 0, categories: {cat: count}}}
         
-        for category, data_json in rows:
-            try:
-                data = json.loads(data_json)
-                text = f"{data.get('title', '')} {data.get('description', '') or ''}"
-                found_countries = detect_countries(text)
+        for row in rows:
+            text = f"{row.get('title', '')} {row.get('description', '') or ''}"
+            found_countries = detect_countries(text)
+            
+            cat = row.get('category', 'General')
+            
+            for country in found_countries:
+                code = country["code"]
+                if code not in country_stats:
+                    country_stats[code] = {
+                        "name": country["name"],
+                        "code": code,
+                        "lat": country["lat"],
+                        "lng": country["lng"],
+                        "count": 0,
+                        "categories": {}
+                    }
                 
-                cat = category or data.get('category', 'General')
+                country_stats[code]["count"] += 1
+                country_stats[code]["categories"][cat] = country_stats[code]["categories"].get(cat, 0) + 1
                 
-                for country in found_countries:
-                    code = country["code"]
-                    if code not in country_stats:
-                        country_stats[code] = {
-                            "name": country["name"],
-                            "code": code,
-                            "lat": country["lat"],
-                            "lng": country["lng"],
-                            "count": 0,
-                            "categories": {}
-                        }
-                    
-                    country_stats[code]["count"] += 1
-                    country_stats[code]["categories"][cat] = country_stats[code]["categories"].get(cat, 0) + 1
-            except Exception:
-                continue
-                
-        conn.close()
-        
-        # Finalize stats: find top category
+        # Finalize stats
         recap = []
         for code, stats in country_stats.items():
             top_cat = "N/A"
@@ -540,17 +525,18 @@ async def geo_db_recap(days: int = Query(7)):
                 "topCategory": top_cat
             })
             
-        # Sort by count
         recap.sort(key=lambda x: x["count"], reverse=True)
         
         return {
             "status": "success",
             "data": recap,
-            "total_articles": len(rows)
+            "total_articles": len(rows),
+            "days_analyzed": days
         }
     except Exception as e:
         print(f"[GEO_RECAP_ERROR] {e}")
         return {"status": "error", "message": str(e)}
+
 
 @app.get("/api/archive-trends")
 async def geo_archive_trends(date: str = Query(...)):

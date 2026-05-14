@@ -26,8 +26,12 @@ import argparse
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# --- Statistical Testing Module (entity_stats Blueprint) ---
+from services.intelligence.entity_stats.stats_service import stats_bp
+app.register_blueprint(stats_bp)
 
 # --- WEBSOCKET SYNC ENGINE ---
 active_symbols = {}
